@@ -4,7 +4,7 @@
         xmlns:vm="clr-namespace:FF14HouseReminder.ViewModels"
         xmlns:local="clr-namespace:FF14HouseReminder"
         xmlns:views="clr-namespace:FF14HouseReminder.Views"
-        Title="FF14 抽房提醒" Width="400" Height="780" MinWidth="360" MinHeight="500"
+        Title="抽房了吗" Width="400" Height="780" MinWidth="360" MinHeight="500"
         WindowStartupLocation="CenterScreen"
         Topmost="{Binding AlwaysOnTop}"
         Background="#D8D8CF" Foreground="#3F3F38" FontSize="12"
@@ -108,8 +108,7 @@
             <!-- 标题栏 -->
             <DockPanel Grid.Row="0" Margin="0,0,0,6">
                 <TextBlock DockPanel.Dock="Left" VerticalAlignment="Bottom">
-                    <Run Text="FF14" FontSize="20" FontWeight="Bold" Foreground="#55554A"/>
-                    <Run Text=" 抽房提醒" FontSize="13" FontWeight="Bold" Foreground="#8B8B5E"/>
+                    <Run Text="抽房了吗" FontSize="20" FontWeight="Bold" Foreground="#55554A"/><Run Text=" FF14" FontSize="12" FontWeight="Bold" Foreground="#8B8B5E"/>
                 </TextBlock>
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
                     <Button Content="{Binding UpdateText}" Style="{StaticResource RetroBtn}"

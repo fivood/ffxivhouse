@@ -10,8 +10,8 @@
     <RootNamespace>FF14HouseReminder</RootNamespace>
     <Version>0.1.0</Version>
     <AssemblyInformationalVersion>0.1.0</AssemblyInformationalVersion>
-    <Description>FF14 抽房时间提醒工具</Description>
-    <Product>FF14HouseReminder</Product>
+    <Description>抽房了吗 - FF14 房屋抽签时间提醒</Description>
+    <Product>抽房了吗</Product>
     <ApplicationIcon>Resources\house.ico</ApplicationIcon>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>

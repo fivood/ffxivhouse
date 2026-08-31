@@ -234,7 +234,7 @@ function findArea(token: string): number {
   return i;
 }
 
-const HELP_TEXT = `🏠 FF14 抽房提醒 Bot
+const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 
 命令：
 /watch 服务器 房区 区号 房号 — 关注（默认"计划抽"）

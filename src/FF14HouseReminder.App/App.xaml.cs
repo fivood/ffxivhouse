@@ -116,11 +116,11 @@ public partial class App : Application
                   "插件地址与令牌见：设置 → 本地直报。"
                 : "";
             MessageBox.Show(
-                "欢迎使用 FF14 抽房提醒！\n\n" +
+                "欢迎使用「抽房了吗」！\n\n" +
                 "使用方式：选择服务器 → 浏览在售房屋 → 点击「＋关注」即可设置提醒。\n" +
                 "提醒将通过 Windows 通知发出，也可在设置中配置 Telegram / 微信推送。" +
                 (hint.Length > 0 ? "\n\n" + hint : ""),
-                "FF14 抽房提醒", MessageBoxButton.OK, MessageBoxImage.Information);
+                "抽房了吗", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 
@@ -153,7 +153,7 @@ public partial class App : Application
     {
         _trayIcon = new TaskbarIcon
         {
-            ToolTipText = "FF14 抽房提醒",
+            ToolTipText = "抽房了吗",
             IconSource = new System.Windows.Media.Imaging.BitmapImage(
                 new Uri("pack://application:,,,/Resources/house.ico"))
         };

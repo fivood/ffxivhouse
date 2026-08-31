@@ -1,0 +1,39 @@
+# 自动发版：推送 v* 标签时构建公开版并创建 GitHub Release
+# 用法：git tag v0.2.0 && git push origin v0.2.0
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Publish public build
+        shell: pwsh
+        run: |
+          $ver = "${env:GITHUB_REF_NAME}".TrimStart('v')
+          Remove-Item src\FF14HouseReminder.App\obj -Recurse -Force -ErrorAction SilentlyContinue
+          dotnet publish src\FF14HouseReminder.App -c Release -r win-x64 --self-contained `
+            -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:PublicBuild=true `
+            -p:Version=$ver -p:AssemblyInformationalVersion=$ver `
+            -o publish\public
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ver = "${env:GITHUB_REF_NAME}".TrimStart('v')
+          Compress-Archive publish\public\FF14HouseReminder.exe "publish\抽房了吗-$ver-public.zip"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: publish/*.zip
+          generate_release_notes: true

@@ -1,4 +1,4 @@
-# FF14HouseReminder（FF14 抽房提醒）
+# 抽房了吗（FF14 房屋抽签提醒）
 
 国服 FF14 房屋抽签时间提醒桌面工具。数据来源：[艾欧泽亚售楼中心](https://house.ffxiv.cyou)（玩家上报数据）。
 
@@ -19,7 +19,7 @@
 
 ## 下载
 
-到 [Releases](../../releases) 下载 `FF14HouseReminder-public.zip`，解压即用（无需安装 .NET）。
+到 [Releases](../../releases) 下载 `抽房了吗-x.y.z-public.zip`，解压即用（无需安装 .NET）。
 
 首次运行被 SmartScreen 拦截属正常现象（个人开发者无代码签名证书），点「仍要运行」即可。
 
@@ -48,3 +48,11 @@ dotnet build ffxivhouse.slnx -c Release
 - 请求售楼中心 API 时带规范 User-Agent，轮询间隔 ≥5 分钟并带随机抖动
 - 数据为玩家上报，可能存在延迟；界面与提醒文案会标注「推测数据 / 数据滞后」
 - 本工具与 Square Enix、盛趣游戏无关。FF14 相关商标归原持有人所有。
+
+## 发版
+
+推送 tag 即自动构建公开版并创建 Release（CI 见 .github/workflows/release.yml）：
+
+```powershell
+git tag v0.1.0; git push origin v0.1.0
+```
