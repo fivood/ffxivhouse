@@ -385,7 +385,7 @@ function renderSales() {
       <div class="row"><span class="title">${h.areaName} ${h.slotNo}区 ${h.id}号 [${h.size}]</span>
         <button class="watch-btn" ${isW ? 'disabled' : ''} onclick="watch('${key}')">${isW ? '已关注' : '＋关注'}</button></div>
       <div><span class="price">${h.price.toLocaleString()} 金币</span>
-        <span class="badge"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] || ''} · ${h.participate}人参与</span></div>
+        <span class="badge"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] || ''}${h.state === 1 ? ` · ${h.participate}人参与` : ''}</span></div>
       <div>${state} <span class="countdown" style="color:${URGENCY(h.phaseEnd)}">${fmtRemain(h.phaseEnd)}</span>
         ${h.stale ? ' <span class="warn">⚠ 数据较旧</span>' : ''}</div>
     </div>`;
