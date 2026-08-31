@@ -33,7 +33,7 @@ jobs:
         shell: pwsh
         run: |
           $ver = "${env:GITHUB_REF_NAME}".TrimStart('v')
-          Compress-Archive publish\public\FF14HouseReminder.exe "publish\抽房了吗-$ver-public.zip"
+          Compress-Archive publish\public\FF14HouseReminder.exe "publish\FF14HouseReminder-$ver-public.zip"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2

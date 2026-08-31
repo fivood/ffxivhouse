@@ -19,7 +19,7 @@
 
 ## 下载
 
-到 [Releases](../../releases) 下载 `抽房了吗-x.y.z-public.zip`，解压即用（无需安装 .NET）。
+到 [Releases](../../releases) 下载 `FF14HouseReminder-x.y.z-public.zip`，解压即用（无需安装 .NET）。
 
 首次运行被 SmartScreen 拦截属正常现象（个人开发者无代码签名证书），点「仍要运行」即可。
 
