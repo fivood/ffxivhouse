@@ -100,6 +100,8 @@
                 <RowDefinition Height="Auto"/>            <!-- 标题栏 -->
                 <RowDefinition Height="Auto"/>            <!-- 关注区标题 -->
                 <RowDefinition Height="2*" MinHeight="120"/> <!-- 关注列表（可拖） -->
+                <RowDefinition Height="Auto"/>            <!-- 我的房产 标题 -->
+                <RowDefinition Height="Auto"/>            <!-- 我的房产 内容（可折叠） -->
                 <RowDefinition Height="Auto"/>            <!-- 拖拽分隔条 -->
                 <RowDefinition Height="3*" MinHeight="240"/> <!-- 浏览区（筛选+在售列表） -->
                 <RowDefinition Height="Auto"/>            <!-- 状态栏 -->
@@ -201,11 +203,87 @@
                 </ListBox.ItemContainerStyle>
             </ListBox>
 
+            <!-- 我的房产（炸房提醒，可折叠） -->
+            <Border Grid.Row="3" Style="{StaticResource Strip}" Cursor="Hand"
+                    MouseLeftButtonUp="HomesStrip_Click" ToolTip="点击展开/收起">
+                <TextBlock FontWeight="Bold" Foreground="#3a4a52">
+                    <Run Text="{Binding HomesArrow, Mode=OneWay}"/>
+                    <Run Text=" 我的房产"/>
+                    <Run Text="  45 天未进房会拆除" FontWeight="Normal" Foreground="#8A8A80" FontSize="11"/>
+                </TextBlock>
+            </Border>
+            <Border Grid.Row="4" Background="White" BorderBrush="#ABABA0" BorderThickness="1,0,1,1"
+                    Visibility="{Binding ShowHomes, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <ListBox ItemsSource="{Binding Homes}" Background="Transparent" BorderThickness="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="vm:HomeViewModel">
+                                <StackPanel Margin="2,4">
+                                    <TextBlock FontWeight="Bold" FontSize="13">
+                                        <Run Text="{Binding PositionText, Mode=OneWay}"/>
+                                        <Run Text="{Binding Label, Mode=OneWay}" Foreground="#8A8A80" FontSize="11"/>
+                                    </TextBlock>
+                                    <TextBlock Margin="0,2,0,0" FontWeight="Bold"
+                                               Text="{Binding StatusText, Mode=OneWay}"
+                                               Foreground="{Binding StatusColor}"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <Button Content="已进房" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                                ToolTip="刚进过房，打卡重置倒计时"
+                                                Command="{Binding DataContext.EnterHomeCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                CommandParameter="{Binding}"/>
+                                        <DatePicker SelectedDate="{Binding BackfillDate}" Width="105" Margin="0,0,4,0"
+                                                    ToolTip="补签：选实际进房日期"/>
+                                        <Button Content="补签" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                                ToolTip="按所选日期补签"
+                                                Command="{Binding DataContext.BackfillHomeCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                CommandParameter="{Binding}"/>
+                                        <Button Content="✕" Style="{StaticResource RetroBtn}" Margin="0"
+                                                Command="{Binding DataContext.RemoveHomeCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="2"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="BorderBrush" Value="#E3E3DA"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                    <StackPanel Margin="6,4" >
+                        <TextBlock FontSize="11" Foreground="#8A8A80"
+                                   Text="登记我的房（登记即起算 45 天；多账号可登记多套，角色名做备注）："/>
+                        <WrapPanel Margin="0,2,0,2">
+                            <ComboBox Width="92" Margin="1" ItemsSource="{Binding Servers}"
+                                      SelectedItem="{Binding HomeServer}" DisplayMemberPath="Name"/>
+                            <ComboBox Width="94" Margin="1" SelectedIndex="{Binding HomeAreaIndex}">
+                                <ComboBoxItem Content="海雾村"/>
+                                <ComboBoxItem Content="薰衣草苗圃"/>
+                                <ComboBoxItem Content="高脚孤丘"/>
+                                <ComboBoxItem Content="白银乡"/>
+                                <ComboBoxItem Content="穹顶皓天"/>
+                            </ComboBox>
+                            <TextBox Width="42" Margin="1" Text="{Binding HomeSlotText}" ToolTip="区号 1-30"/>
+                            <TextBox Width="42" Margin="1" Text="{Binding HomePlotText}" ToolTip="房号 1-60"/>
+                            <TextBox Width="70" Margin="1" Text="{Binding HomeLabelText}" ToolTip="角色名/备注"/>
+                            <Button Content="登记" Style="{StaticResource RetroBtn}" Command="{Binding AddHomeCommand}"/>
+                        </WrapPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- 拖拽分隔条 -->
-            <GridSplitter Grid.Row="3" ResizeBehavior="PreviousAndNext"/>
+            <GridSplitter Grid.Row="5" ResizeBehavior="PreviousAndNext"/>
 
             <!-- 浏览区 -->
-            <Grid Grid.Row="4">
+            <Grid Grid.Row="6">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -298,7 +376,7 @@
             </Grid>
 
             <!-- 状态栏 -->
-            <Border Grid.Row="5" Margin="0,4,0,0" Background="#EBEBE4" BorderBrush="#ABABA0"
+            <Border Grid.Row="7" Margin="0,4,0,0" Background="#EBEBE4" BorderBrush="#ABABA0"
                     BorderThickness="1" Padding="6,2">
                 <WrapPanel>
                     <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" Text="{Binding StatusText}"/>

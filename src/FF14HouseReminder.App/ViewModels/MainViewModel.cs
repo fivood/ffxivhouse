@@ -17,6 +17,15 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<WatchViewModel> WatchList { get; } = [];
     public ObservableCollection<HouseItemViewModel> SalesList { get; } = [];
+    public ObservableCollection<HomeViewModel> Homes { get; } = [];
+
+    // 房产登记表单
+    [ObservableProperty] private GameData.ServerInfo? _homeServer;
+    [ObservableProperty] private int _homeAreaIndex;
+    [ObservableProperty] private string _homeSlotText = "";
+    [ObservableProperty] private string _homePlotText = "";
+    [ObservableProperty] private string _homeLabelText = "";
+    [ObservableProperty] private bool _showHomes = true;
 
     public List<GameData.ServerInfo> Servers { get; } = GameData.AllServers.ToList();
 
@@ -75,8 +84,10 @@ public partial class MainViewModel : ObservableObject
         // 默认选中有关注项的服务器，否则默认拉诺西亚
         var watchServer = _config.Config.WatchList.FirstOrDefault()?.Server;
         SelectedServer = Servers.FirstOrDefault(s => s.Id == watchServer) ?? Servers.First(s => s.Id == 1042);
+        HomeServer = SelectedServer;
 
         RefreshWatchList();
+        RefreshHomes();
         if (_updates.UpdateAvailable)
         {
             HasUpdate = true;
@@ -106,7 +117,80 @@ public partial class MainViewModel : ObservableObject
         Now = DateTimeOffset.Now;
         foreach (var w in WatchList) w.Refresh(Now);
         foreach (var h in SalesList) h.Refresh(Now);
+        foreach (var h in Homes) h.Refresh(Now);
         IngestStatusText = BuildFlags.HasLocalIngest && App.Ingest != null ? App.Ingest.StatusText : "";
+    }
+
+    private void RefreshHomes()
+    {
+        Homes.Clear();
+        // 死线最近的排最前
+        foreach (var h in _config.Config.Homes.OrderBy(h => h.Deadline))
+            Homes.Add(new HomeViewModel(h, Now));
+    }
+
+    [RelayCommand]
+    private void ToggleHomes()
+    {
+        ShowHomes = !ShowHomes;
+        OnPropertyChanged(nameof(HomesArrow));
+    }
+
+    public string HomesArrow => ShowHomes ? "▾" : "▸";
+
+    [RelayCommand]
+    private void AddHome()
+    {
+        if (HomeServer == null) return;
+        if (!int.TryParse(HomeSlotText, out var slot) || slot < 1 || slot > 30) return;
+        if (!int.TryParse(HomePlotText, out var plot) || plot < 1 || plot > 60) return;
+
+        var key = new HouseKey(HomeServer.Id, HomeAreaIndex, slot - 1, plot);
+        if (_config.Config.Homes.Any(h => h.Key == key)) return;
+
+        _config.Config.Homes.Add(new HomeEntry
+        {
+            Server = HomeServer.Id,
+            Area = HomeAreaIndex,
+            Slot = slot - 1,
+            Id = plot,
+            Label = string.IsNullOrWhiteSpace(HomeLabelText) ? "我的房" : HomeLabelText.Trim(),
+            LastEnteredAt = DateTimeOffset.Now.ToUnixTimeSeconds() // 登记即起算
+        });
+        _config.Save();
+        HomeSlotText = HomePlotText = HomeLabelText = "";
+        _reminders.Recompute();
+        RefreshHomes();
+    }
+
+    [RelayCommand]
+    private void RemoveHome(HomeViewModel item)
+    {
+        _config.Config.Homes.RemoveAll(h => h.Key == item.Item.Key);
+        _config.Save();
+        _reminders.Recompute();
+        RefreshHomes();
+    }
+
+    [RelayCommand]
+    private void EnterHome(HomeViewModel item)
+    {
+        item.Item.LastEnteredAt = DateTimeOffset.Now.ToUnixTimeSeconds();
+        _config.Save();
+        _reminders.Recompute();
+        RefreshHomes();
+    }
+
+    [RelayCommand]
+    private void BackfillHome(HomeViewModel item)
+    {
+        if (item.BackfillDate == null) return;
+        var date = item.BackfillDate.Value.Date;
+        if (date > DateTime.Today) return; // 不允许未来日期
+        item.Item.LastEnteredAt = new DateTimeOffset(date, TimeSpan.Zero).ToUnixTimeSeconds();
+        _config.Save();
+        _reminders.Recompute();
+        RefreshHomes();
     }
 
     private void RefreshAll()

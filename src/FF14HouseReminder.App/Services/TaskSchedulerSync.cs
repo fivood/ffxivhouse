@@ -28,6 +28,7 @@ public class TaskSchedulerSync
                 .ToDictionary(r => TaskName(r.Key), r => r);
 
             // 删除失效任务
+            var existingNames = folder.Tasks.Select(t => t.Name).ToHashSet();
             foreach (var task in folder.Tasks.ToList())
             {
                 if (!wanted.ContainsKey(task.Name))
@@ -37,9 +38,9 @@ public class TaskSchedulerSync
             // 创建/更新任务
             foreach (var (name, reminder) in wanted)
             {
-                var existing = folder.Tasks[name];
-                if (existing != null)
+                if (existingNames.Contains(name))
                 {
+                    var existing = folder.Tasks.First(t => t.Name == name);
                     var trigger = existing.Definition.Triggers.OfType<TimeTrigger>().FirstOrDefault();
                     if (trigger != null && trigger.StartBoundary == reminder.FireAt.LocalDateTime)
                         continue; // 已是最新

@@ -44,8 +44,10 @@ public partial class MainWindow : Window
             _restoreLeft = Left;
             SettingsPanelControl.Visibility = Visibility.Visible;
             Width = CollapsedWidth + SettingsPanelWidth;
-            // 锚定右边缘展开，避免超出屏幕
-            Left = Math.Max(SystemParameters.WorkArea.Left, _restoreLeft - SettingsPanelWidth);
+            // 以左边缘为原点向右展开；超出工作区右缘才左移
+            var overflow = Left + Width - SystemParameters.WorkArea.Right;
+            if (overflow > 0)
+                Left = Math.Max(SystemParameters.WorkArea.Left, Left - overflow);
         }
         else
         {
@@ -54,6 +56,9 @@ public partial class MainWindow : Window
             Left = _restoreLeft;
         }
     }
+
+    private void HomesStrip_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) =>
+        _vm.ToggleHomesCommand.Execute(null);
 
     // 关闭时最小化到托盘（托盘菜单"退出"才真正退出）
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

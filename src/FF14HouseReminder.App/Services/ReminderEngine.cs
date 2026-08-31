@@ -16,6 +16,9 @@ public class ReminderEngine
     private List<ScheduledReminder> _scheduled = [];
     private readonly object _lock = new();
 
+    /// <summary>炸房提醒提前量（天）</summary>
+    private static readonly int[] DemolitionLeadDays = [10, 5, 1];
+
     public ReminderEngine(ConfigService config, DataStore store, PushService push, TaskSchedulerSync taskSync)
     {
         _config = config;

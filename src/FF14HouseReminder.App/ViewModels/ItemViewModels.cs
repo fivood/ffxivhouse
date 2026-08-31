@@ -97,6 +97,41 @@ public partial class WatchViewModel : ObservableObject
     }
 }
 
+/// <summary>我的房产列表项（炸房倒计时）</summary>
+public partial class HomeViewModel : ObservableObject
+{
+    public HomeEntry Item { get; }
+
+    [ObservableProperty] private string _statusText = "";
+    [ObservableProperty] private string _statusColor = "#8A8A80";
+    [ObservableProperty] private DateTime? _backfillDate;
+
+    public HomeViewModel(HomeEntry item, DateTimeOffset now)
+    {
+        Item = item;
+        Refresh(now);
+    }
+
+    public string PositionText => Item.PositionText;
+    public string Label => Item.Label;
+
+    public void Refresh(DateTimeOffset now)
+    {
+        if (Item.LastEnteredAt <= 0)
+        {
+            StatusText = "进房时间未知，进房后打卡";
+            StatusColor = "#8A8A80";
+            return;
+        }
+        var remain = Item.Deadline - now;
+        var days = (int)Math.Floor(remain.TotalDays);
+        StatusText = days >= 0
+            ? $"剩余 {days} 天（最后进房 {Item.Deadline.AddDays(-45).LocalDateTime:MM-dd}）"
+            : "已超过 45 天未进房！";
+        StatusColor = days <= 1 ? "#B03030" : days <= 5 ? "#B06030" : days <= 10 ? "#A66A00" : "#4C7A34";
+    }
+}
+
 /// <summary>在售房屋列表项</summary>
 public partial class HouseItemViewModel : ObservableObject
 {
