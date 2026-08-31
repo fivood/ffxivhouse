@@ -2,5 +2,4 @@
 interface Env {
   TG_BOT_TOKEN?: string;
   TG_WEBHOOK_SECRET?: string;
-  WXPUSHER_APP_TOKEN?: string;
 }

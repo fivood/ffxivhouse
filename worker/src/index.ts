@@ -80,8 +80,8 @@ interface UserSub {
   chatId: number;
   leadHours: number[];
   items: WatchItem[];
-  /** 可选：WxPusher 微信推送 UID */
-  wxpusherUid?: string;
+  /** 可选：WxPusher 极简推送 SPT（微信渠道） */
+  wxpusherSpt?: string;
 }
 
 interface Phase { state: number; end: number; estimated: boolean }
@@ -160,19 +160,12 @@ async function tgSend(env: Env, chatId: number, text: string): Promise<void> {
   if (!resp.ok) console.error(`tgSend 失败 ${resp.status}: ${await resp.text()}`);
 }
 
-/** WxPusher 微信推送（可选附加渠道） */
-async function wxSend(env: Env, uid: string, title: string, body: string): Promise<void> {
-  if (!env.WXPUSHER_APP_TOKEN) return;
-  const resp = await fetch('https://wxpusher.zjiecode.com/api/send/message', {
+/** WxPusher 极简推送（SPT，用户自助扫码获取，微信渠道） */
+async function wxSend(env: Env, spt: string, title: string, body: string): Promise<void> {
+  const resp = await fetch('https://wxpusher.zjiecode.com/api/send/message/simple-push', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
-    body: JSON.stringify({
-      appToken: env.WXPUSHER_APP_TOKEN,
-      content: body,
-      summary: title,
-      contentType: 1,
-      uids: [uid],
-    }),
+    body: JSON.stringify({ spt, content: body, summary: title, contentType: 1 }),
   });
   if (!resp.ok) console.error(`wxSend 失败 ${resp.status}: ${await resp.text()}`);
 }
@@ -481,7 +474,7 @@ async function runReminders(env: Env): Promise<void> {
 
     for (const r of due) {
       await tgSend(env, r.chatId, `${r.title}\n\n${r.body}`);
-      if (sub.wxpusherUid) await wxSend(env, sub.wxpusherUid, r.title, r.body);
+      if (sub.wxpusherSpt) await wxSend(env, sub.wxpusherSpt, r.title, r.body);
     }
     if (dirty) await saveSub(env, sub);
   }
@@ -570,7 +563,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const sub = await getSub(env, chatId);
     return json({
       leadHours: sub.leadHours,
-      wxpusherUid: sub.wxpusherUid ?? '',
+      wxpusherSpt: sub.wxpusherSpt ?? '',
       items: await enrichWatch(env, sub),
     });
   }
@@ -633,15 +626,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/wxpusher' && request.method === 'POST') {
-    const body = (await request.json()) as { u?: number; k?: string; uid?: string };
+    const body = (await request.json()) as { u?: number; k?: string; spt?: string };
     const chatId = await checkAuthBody(env, body);
     if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
-    const uid = (body.uid ?? '').trim();
-    if (uid && !uid.startsWith('UID_')) return json({ error: 'UID 格式不对（应以 UID_ 开头）' }, 400);
+    const spt = (body.spt ?? '').trim();
+    if (spt && !spt.startsWith('SPT_')) return json({ error: 'SPT 格式不对（应以 SPT_ 开头）' }, 400);
     const sub = await getSub(env, chatId);
-    if (uid) sub.wxpusherUid = uid; else delete sub.wxpusherUid;
+    if (spt) sub.wxpusherSpt = spt; else delete sub.wxpusherSpt;
     await saveSub(env, sub);
-    return json({ ok: true, wxpusherUid: sub.wxpusherUid ?? '' });
+    return json({ ok: true, wxpusherSpt: sub.wxpusherSpt ?? '' });
   }
 
   return json({ error: 'not found' }, 404);

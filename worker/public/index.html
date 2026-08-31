@@ -96,10 +96,10 @@
     </div>
     <br>
     <b>微信推送（可选）</b>：除 Telegram 外，同时推送到微信<br>
-    <span class="meta">① 微信扫码订阅推送应用 → ② 打开 WxPusher 小程序查看自己的 UID → ③ 粘贴到这里</span>
-    <img src="/wxqr.png" alt="订阅二维码" style="width:140px;margin:6px 0" onerror="this.style.display='none'">
+    <span class="meta">① 微信打开 <a href="https://wxpusher.zjiecode.com/docs/spt.html" target="_blank">WxPusher 极简推送页</a>，扫页面上的 SPT 二维码
+    → ② 按提示获得 SPT_ 开头的令牌 → ③ 粘贴到这里</span>
     <div class="row">
-      <input type="text" id="wxUidInput" placeholder="UID_ 开头，留空则关闭微信推送" style="flex:1">
+      <input type="text" id="wxUidInput" placeholder="SPT_ 开头，留空则关闭微信推送" style="flex:1">
       <button onclick="saveWxUid()">保存</button>
     </div>
     <span class="meta" id="wxUidStatus"></span>
@@ -208,8 +208,8 @@ async function loadWatch() {
     const data = await resp.json();
     myWatches = data.items || [];
     $('leadInput').value = (data.leadHours || []).join(',');
-    $('wxUidInput').value = data.wxpusherUid || '';
-    $('wxUidStatus').textContent = data.wxpusherUid ? '✅ 微信推送已开启' : '';
+    $('wxUidInput').value = data.wxpusherSpt || '';
+    $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
     $('bindPanel').style.display = 'none';
     $('watchSection').style.display = 'block';
     renderWatch();
@@ -328,10 +328,10 @@ async function saveLead() {
 }
 
 async function saveWxUid() {
-  const resp = await api('POST', '/api/wxpusher', { uid: $('wxUidInput').value.trim() });
+  const resp = await api('POST', '/api/wxpusher', { spt: $('wxUidInput').value.trim() });
   const data = await resp.json();
   if (resp.ok) {
-    $('wxUidStatus').textContent = data.wxpusherUid ? '✅ 微信推送已开启' : '已关闭微信推送';
+    $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '已关闭微信推送';
     toast('已保存');
   } else {
     toast(data.error || '保存失败');
