@@ -84,6 +84,13 @@
   }
   .chip:hover { background: var(--white); }
   .chip.on { background: var(--link); color: #fff; border-color: var(--link); }
+  /* 微信渠道折叠开关 */
+  .wx-toggle {
+    display: block; width: 100%; text-align: left; font-weight: bold;
+    background: transparent; border: 1px solid var(--border);
+    padding: 6px 8px; margin: 4px 0;
+  }
+  .wx-toggle:hover:not(:disabled) { background: var(--white); }
   .footer { color: var(--dim); font-size: 11px; text-align: center; margin: 12px 0; }
   .footer a { color: var(--link); }
   .footer a:hover { color: var(--link-hover); }
@@ -139,24 +146,28 @@
     <div class="chips" id="leadChips"></div>
     <span class="meta">可多选；微信渠道有频率限制（约 20 条/天），建议不超过 3 个</span>
     <br>
-    <b>微信推送（可选，走 WxPusher APP）</b>：除 Telegram 外，同时推送到手机<br>
-    <span class="meta">因微信官方收紧公众号通道，消息改为 <b>WxPusher APP</b> 接收（支持苹果/小米/华为/vivo/荣耀系统级推送）。<br>
-    ① 微信扫二维码关注 WxPusher 公众号 → ② 按提示获得 SPT_ 开头的令牌 → ③ 粘贴到下方 → ④ 安装 <a href="https://wxpusher.zjiecode.com/download/" target="_blank">WxPusher APP</a> 并登录同一微信即可收到推送</span>
-    <button onclick="toggleQr()" id="qrBtn" class="icon-btn" title="显示/收起二维码" style="margin:2px 0">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h1v1h-1zM17 17h4v4h-4z" fill="currentColor" stroke="none"/></svg>
-      <span style="margin-left:4px">二维码</span>
+    <button class="wx-toggle" id="wxToggle" onclick="toggleWx()">
+      <span id="wxArrow">▸</span> 微信推送（可选，走 WxPusher APP）<span id="wxMiniStatus" style="color:var(--green)"></span>
     </button>
-    <div id="qrBox" style="display:none;text-align:center;padding:6px">
-      <img src="https://wxpusher.zjiecode.com/api/qrcode/RwjGLMOPTYp35zSYQr0HxbCPrV9eU0wKVBXU1D5VVtya0cQXEJWPjqBdW3gKLifS.jpg"
-           alt="WxPusher 二维码" style="width:180px;height:180px;border:1px solid var(--border)">
-    </div>
-    <div class="row">
-      <input type="text" id="wxUidInput" placeholder="SPT_ 开头，留空则关闭微信推送" style="flex:1">
-      <button onclick="saveWxUid()" class="icon-btn" title="保存微信推送设置">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    <div id="wxSection" style="display:none">
+      <span class="meta">除 Telegram 外，同时推送到手机。因微信官方收紧公众号通道，消息由 <b>WxPusher APP</b> 接收（支持苹果/小米/华为/vivo/荣耀系统级推送）。<br>
+      ① 微信扫二维码关注 WxPusher 公众号 → ② 按提示获得 SPT_ 开头的令牌 → ③ 粘贴到下方 → ④ 安装 <a href="https://wxpusher.zjiecode.com/download/" target="_blank">WxPusher APP</a> 并登录同一微信即可收到推送</span>
+      <button onclick="toggleQr()" id="qrBtn" class="icon-btn" title="显示/收起二维码" style="margin:2px 0">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h1v1h-1zM17 17h4v4h-4z" fill="currentColor" stroke="none"/></svg>
+        <span style="margin-left:4px">二维码</span>
       </button>
+      <div id="qrBox" style="display:none;text-align:center;padding:6px">
+        <img src="https://wxpusher.zjiecode.com/api/qrcode/RwjGLMOPTYp35zSYQr0HxbCPrV9eU0wKVBXU1D5VVtya0cQXEJWPjqBdW3gKLifS.jpg"
+             alt="WxPusher 二维码" style="width:180px;height:180px;border:1px solid var(--border)">
+      </div>
+      <div class="row">
+        <input type="text" id="wxUidInput" placeholder="SPT_ 开头，留空则关闭微信推送" style="flex:1">
+        <button onclick="saveWxUid()" class="icon-btn" title="保存微信推送设置">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        </button>
+      </div>
+      <span class="meta" id="wxUidStatus"></span>
     </div>
-    <span class="meta" id="wxUidStatus"></span>
   </div>
 </div>
 
@@ -262,6 +273,7 @@ async function loadWatch() {
     renderChips();
     $('wxUidInput').value = data.wxpusherSpt || '';
     $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
+    $('wxMiniStatus').textContent = data.wxpusherSpt ? ' ✅已开启' : '';
     $('nickBadge').textContent = data.nickname ? `👋 ${data.nickname}` : '';
     $('bindPanel').style.display = 'none';
     $('watchSection').style.display = 'block';
@@ -408,11 +420,19 @@ function toggleQr() {
   $('qrBtn').classList.toggle('on', !showing);
 }
 
+function toggleWx() {
+  const box = $('wxSection');
+  const showing = box.style.display !== 'none';
+  box.style.display = showing ? 'none' : 'block';
+  $('wxArrow').textContent = showing ? '▸' : '▾';
+}
+
 async function saveWxUid() {
   const resp = await api('POST', '/api/wxpusher', { spt: $('wxUidInput').value.trim() });
   const data = await resp.json();
   if (resp.ok) {
     $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '已关闭微信推送';
+    $('wxMiniStatus').textContent = data.wxpusherSpt ? ' ✅已开启' : '';
     toast('已保存');
   } else {
     toast(data.error || '保存失败');
