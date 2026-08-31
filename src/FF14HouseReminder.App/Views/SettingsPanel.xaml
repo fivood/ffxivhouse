@@ -5,12 +5,12 @@
              FontFamily="Tahoma, Microsoft YaHei UI" FontSize="12">
     <UserControl.Resources>
         <Style TargetType="TextBox">
-            <Setter Property="Margin" Value="0,2,0,6"/>
-            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Margin" Value="0,3,0,8"/>
+            <Setter Property="Padding" Value="5,4"/>
             <Setter Property="BorderBrush" Value="#ABABA0"/>
         </Style>
         <Style TargetType="CheckBox">
-            <Setter Property="Margin" Value="0,3"/>
+            <Setter Property="Margin" Value="0,5"/>
         </Style>
         <Style TargetType="TextBlock" x:Key="H">
             <Setter Property="FontWeight" Value="Bold"/>
@@ -22,8 +22,8 @@
             <Setter Property="Foreground" Value="#3F3F38"/>
             <Setter Property="BorderBrush" Value="#ABABA0"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,3"/>
-            <Setter Property="Margin" Value="4,2"/>
+            <Setter Property="Padding" Value="11,5"/>
+            <Setter Property="Margin" Value="4,3"/>
         </Style>
     </UserControl.Resources>
 

@@ -27,8 +27,8 @@
             <Setter Property="Foreground" Value="#3F3F38"/>
             <Setter Property="BorderBrush" Value="#ABABA0"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="9,2"/>
-            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Margin" Value="3,1"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -58,7 +58,15 @@
             <Setter Property="Background" Value="#EBEBE4"/>
             <Setter Property="BorderBrush" Value="#ABABA0"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="6,3"/>
+            <Setter Property="Padding" Value="9,6"/>
+        </Style>
+
+        <!-- 列表项：统一留白 -->
+        <Style TargetType="ListBoxItem" x:Key="RoomyItem">
+            <Setter Property="Padding" Value="6,7"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="BorderBrush" Value="#E3E3DA"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
         </Style>
 
         <!-- 内容白板 -->
@@ -88,6 +96,10 @@
         </Style>
     </Window.Resources>
 
+    <Window.InputBindings>
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}"/>
+    </Window.InputBindings>
+
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
@@ -95,7 +107,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- ══ 主内容 ══ -->
-        <Grid Grid.Column="0" Margin="8">
+        <Grid Grid.Column="0" Margin="10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>            <!-- 标题栏 -->
                 <RowDefinition Height="Auto"/>            <!-- 关注区标题 -->
@@ -108,7 +120,7 @@
             </Grid.RowDefinitions>
 
             <!-- 标题栏 -->
-            <DockPanel Grid.Row="0" Margin="0,0,0,6">
+            <DockPanel Grid.Row="0" Margin="0,0,0,9">
                 <TextBlock DockPanel.Dock="Left" VerticalAlignment="Bottom">
                     <Run Text="抽房了吗" FontSize="20" FontWeight="Bold" Foreground="#55554A"/><Run Text=" FF14" FontSize="12" FontWeight="Bold" Foreground="#8B8B5E"/>
                 </TextBlock>
@@ -118,8 +130,9 @@
                             Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}"
                             Command="{Binding OpenUpdateCommand}"/>
                     <Button Content="↻ 刷新" Style="{StaticResource RetroBtn}" Command="{Binding RefreshCommand}"/>
-                    <Button Content="售楼中心" Style="{StaticResource RetroBtn}" Command="{Binding OpenWebsiteCommand}"/>
-                    <Button Content="置顶" Command="{Binding ToggleTopCommand}">
+                    <Button Content="🌐 售楼中心" Style="{StaticResource RetroBtn}" ToolTip="打开艾欧泽亚售楼中心网站"
+                            Command="{Binding OpenWebsiteCommand}"/>
+                    <Button Content="📌 置顶" ToolTip="窗口始终显示在最前" Command="{Binding ToggleTopCommand}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource RetroBtn}">
                                 <Style.Triggers>
@@ -154,7 +167,7 @@
                      BorderThickness="1,0,1,1" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                     <DataTemplate DataType="vm:WatchViewModel">
-                        <Grid Margin="2,4">
+                        <Grid Margin="2,3">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
@@ -165,14 +178,14 @@
                                     <Run Text="{Binding SizeName, Mode=OneWay}" Foreground="#8B8B5E"/>
                                     <Run Text="{Binding ModeText, Mode=OneWay}" Foreground="#4C7A34"/>
                                 </TextBlock>
-                                <TextBlock Margin="0,3,0,0">
+                                <TextBlock Margin="0,6,0,0">
                                     <Run Text="{Binding StateText, Mode=OneWay}"
                                          Foreground="{Binding StateColor}" FontWeight="Bold"/>
                                     <Run Text="  "/>
                                     <Run Text="{Binding CountdownText, Mode=OneWay}"
                                          Foreground="{Binding CountdownColor}"/>
                                 </TextBlock>
-                                <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" Margin="0,2,0,0">
+                                <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" Margin="0,5,0,0">
                                     <Run Text="{Binding SourceText, Mode=OneWay}"/>
                                     <Run Text="  "/>
                                     <Run Text="{Binding FreshnessText, Mode=OneWay}"/>
@@ -185,7 +198,7 @@
                                         Command="{Binding DataContext.ToggleWatchModeCommand,
                                             RelativeSource={RelativeSource AncestorType=ListBox}}"
                                         CommandParameter="{Binding}"/>
-                                <Button Content="✕ 移除" Style="{StaticResource RetroBtn}"
+                                <Button Content="🗑" Style="{StaticResource RetroBtn}" ToolTip="移除关注"
                                         Command="{Binding DataContext.RemoveWatchCommand,
                                             RelativeSource={RelativeSource AncestorType=ListBox}}"
                                         CommandParameter="{Binding}"/>
@@ -194,14 +207,13 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
                 <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
-                        <Setter Property="Padding" Value="4"/>
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="BorderBrush" Value="#E3E3DA"/>
-                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                    </Style>
+                    <StaticResource ResourceKey="RoomyItem"/>
                 </ListBox.ItemContainerStyle>
             </ListBox>
+            <TextBlock Grid.Row="2" Text="还没有关注&#10;在下面「在售房屋」里点 ＋关注" TextAlignment="Center"
+                       Foreground="{StaticResource TextDim}" IsHitTestVisible="False"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       Visibility="{Binding WatchEmpty, Converter={StaticResource BoolToVis}}"/>
 
             <!-- 我的房产（炸房提醒，可折叠） -->
             <Border Grid.Row="3" Style="{StaticResource Strip}" Cursor="Hand"
@@ -209,7 +221,7 @@
                 <TextBlock FontWeight="Bold" Foreground="#3a4a52">
                     <Run Text="{Binding HomesArrow, Mode=OneWay}"/>
                     <Run Text=" 我的房产"/>
-                    <Run Text="  45 天未进房会拆除" FontWeight="Normal" Foreground="#8A8A80" FontSize="11"/>
+                    <Run Text="  45 天未进屋会拆除" FontWeight="Normal" Foreground="#8A8A80" FontSize="11"/>
                 </TextBlock>
             </Border>
             <Border Grid.Row="4" Background="White" BorderBrush="#ABABA0" BorderThickness="1,0,1,1"
@@ -219,53 +231,58 @@
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="vm:HomeViewModel">
-                                <StackPanel Margin="2,4">
+                                <StackPanel Margin="2,3">
                                     <TextBlock FontWeight="Bold" FontSize="13">
                                         <Run Text="{Binding PositionText, Mode=OneWay}"/>
                                         <Run Text="{Binding Label, Mode=OneWay}" Foreground="#8A8A80" FontSize="11"/>
                                     </TextBlock>
-                                    <TextBlock Margin="0,2,0,0" FontWeight="Bold"
+                                    <TextBlock Margin="0,5,0,0" FontWeight="Bold" TextWrapping="Wrap"
                                                Text="{Binding StatusText, Mode=OneWay}"
                                                Foreground="{Binding StatusColor}"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                                        <Button Content="已进房" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
-                                                ToolTip="刚进过房，打卡重置倒计时"
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <Button Content="🏠 已进屋" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                                Visibility="{Binding NotDemolished, Converter={StaticResource BoolToVis}}"
+                                                ToolTip="刚进过屋，打卡重置倒计时"
                                                 Command="{Binding DataContext.EnterHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
                                         <DatePicker SelectedDate="{Binding BackfillDate}" Width="105" Margin="0,0,4,0"
-                                                    ToolTip="补签：选实际进房日期"/>
-                                        <Button Content="补签" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                                    DisplayDateEnd="{Binding DataContext.Today,
+                                                        RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                    ToolTip="日期：补签进屋日 / 标记炸房日都用它，留空按今天算"/>
+                                        <Button Content="🗓 补签" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                                Visibility="{Binding NotDemolished, Converter={StaticResource BoolToVis}}"
                                                 ToolTip="按所选日期补签"
                                                 Command="{Binding DataContext.BackfillHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
-                                        <Button Content="炸房" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
-                                                ToolTip="房子被拆了？标记后开始旧家具 35 天保管倒计时（再点取消）"
+                                        <Button Content="🗓 改炸房日" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                                Visibility="{Binding Demolished, Converter={StaticResource BoolToVis}}"
+                                                ToolTip="按所选日期更正炸房日"
+                                                Command="{Binding DataContext.SetDemolishDateCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                CommandParameter="{Binding}"/>
+                                        <Button Content="{Binding DemolishText}" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                                ToolTip="房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算（再点取消）"
                                                 Command="{Binding DataContext.DemolishHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
-                                        <Button Content="✕" Style="{StaticResource RetroBtn}" Margin="0"
+                                        <Button Content="🗑" Style="{StaticResource RetroBtn}" Margin="0" ToolTip="移除这套房产"
                                                 Command="{Binding DataContext.RemoveHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
-                                    </StackPanel>
+                                    </WrapPanel>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                         <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem">
-                                <Setter Property="Padding" Value="2"/>
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Setter Property="BorderBrush" Value="#E3E3DA"/>
-                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                            </Style>
+                            <StaticResource ResourceKey="RoomyItem"/>
                         </ListBox.ItemContainerStyle>
                     </ListBox>
-                    <StackPanel Margin="6,4" >
+                    <StackPanel Margin="8,7" >
                         <TextBlock FontSize="11" Foreground="#8A8A80"
                                    Text="登记我的房（登记即起算 45 天；多账号可登记多套，角色名做备注）："/>
-                        <WrapPanel Margin="0,2,0,2">
+                        <WrapPanel Margin="0,5,0,3">
                             <ComboBox Width="92" Margin="1" ItemsSource="{Binding Servers}"
                                       SelectedItem="{Binding HomeServer}" DisplayMemberPath="Name"/>
                             <ComboBox Width="94" Margin="1" SelectedIndex="{Binding HomeAreaIndex}">
@@ -278,8 +295,9 @@
                             <TextBox Width="42" Margin="1" Text="{Binding HomeSlotText}" ToolTip="区号 1-30"/>
                             <TextBox Width="42" Margin="1" Text="{Binding HomePlotText}" ToolTip="房号 1-60"/>
                             <TextBox Width="70" Margin="1" Text="{Binding HomeLabelText}" ToolTip="角色名/备注"/>
-                            <Button Content="登记" Style="{StaticResource RetroBtn}" Command="{Binding AddHomeCommand}"/>
+                            <Button Content="🏠 登记" Style="{StaticResource RetroBtn}" Command="{Binding AddHomeCommand}"/>
                         </WrapPanel>
+                        <TextBlock Text="{Binding HomeHint}" Foreground="#B03030" FontSize="11" TextWrapping="Wrap"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -296,8 +314,11 @@
                 </Grid.RowDefinitions>
                 <Border Grid.Row="0" Style="{StaticResource Strip}">
                     <DockPanel>
-                        <TextBlock Text="⊙  在售房屋" FontWeight="Bold" Foreground="#55554A"
-                                   DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                        <TextBlock FontWeight="Bold" Foreground="#55554A"
+                                   DockPanel.Dock="Left" VerticalAlignment="Center">
+                            <Run Text="⊙  在售房屋"/><Run Text="{Binding SalesCountText, Mode=OneWay}"
+                                 FontWeight="Normal" FontSize="11" Foreground="#8A8A80"/>
+                        </TextBlock>
                         <ComboBox Width="118" Margin="1" HorizontalAlignment="Right" DockPanel.Dock="Right"
                                   SelectedIndex="{Binding SortIndex}" ToolTip="排序方式">
                             <ComboBoxItem Content="默认(房区/房号)"/>
@@ -338,7 +359,7 @@
                          BorderThickness="1,0,1,1" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemTemplate>
                         <DataTemplate DataType="vm:HouseItemViewModel">
-                            <Grid Margin="2,4">
+                            <Grid Margin="2,3">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -349,10 +370,10 @@
                                         <Run Text="{Binding Badges, Mode=OneWay}" Foreground="{StaticResource TextDim}"
                                              FontSize="11"/>
                                     </TextBlock>
-                                    <TextBlock Margin="0,3,0,0">
+                                    <TextBlock Margin="0,6,0,0">
                                         <Run Text="{Binding PriceText, Mode=OneWay}" Foreground="#A66A00"/>
                                     </TextBlock>
-                                    <TextBlock Margin="0,2,0,0">
+                                    <TextBlock Margin="0,5,0,0">
                                         <Run Text="{Binding StateText, Mode=OneWay}"
                                              Foreground="{Binding StateColor}" FontWeight="Bold"/>
                                         <Run Text="  "/>
@@ -370,19 +391,18 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                     <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="Padding" Value="4"/>
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                            <Setter Property="BorderBrush" Value="#E3E3DA"/>
-                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                        </Style>
+                        <StaticResource ResourceKey="RoomyItem"/>
                     </ListBox.ItemContainerStyle>
                 </ListBox>
+                <TextBlock Grid.Row="2" Text="{Binding SalesEmptyText}" TextAlignment="Center"
+                           Foreground="{StaticResource TextDim}" IsHitTestVisible="False"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="{Binding SalesEmpty, Converter={StaticResource BoolToVis}}"/>
             </Grid>
 
             <!-- 状态栏 -->
-            <Border Grid.Row="7" Margin="0,4,0,0" Background="#EBEBE4" BorderBrush="#ABABA0"
-                    BorderThickness="1" Padding="6,2">
+            <Border Grid.Row="7" Margin="0,6,0,0" Background="#EBEBE4" BorderBrush="#ABABA0"
+                    BorderThickness="1" Padding="8,5">
                 <WrapPanel>
                     <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" Text="{Binding StatusText}"/>
                     <TextBlock FontSize="11" Foreground="{StaticResource TextDim}"

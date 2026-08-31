@@ -160,15 +160,15 @@ public class ReminderEngine
             {
                 Add2(ReminderType.Demolition, days, deadline.AddDays(-days), deadline, homeKey,
                     $"炸房警告：还剩 {days} 天",
-                    $"{pos} 已超过 {45 - days} 天未进房！记得上线进一次房（进入室内才算），" +
-                    $"进房后在「我的房产」里打卡。死线：{deadline.LocalDateTime:MM-dd HH:mm}");
+                    $"{pos} 已超过 {45 - days} 天未进屋！记得上线进一次屋（进入室内才算），" +
+                    $"进屋后在「我的房产」里打卡。死线：{deadline.LocalDateTime:MM-dd HH:mm}");
             }
             // 已过期：立即提醒一次
             if (now >= deadline)
             {
                 Add2(ReminderType.Demolition, 0, now, deadline, homeKey,
                     "炸房倒计时已到",
-                    $"{pos} 已超过 45 天未进房，可能已进入拆除流程！请立即上线进房抢救！");
+                    $"{pos} 已超过 45 天未进屋，可能已进入拆除流程！请立即上线进屋抢救！");
             }
         }
 

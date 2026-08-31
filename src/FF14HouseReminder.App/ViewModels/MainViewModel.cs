@@ -25,7 +25,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _homeSlotText = "";
     [ObservableProperty] private string _homePlotText = "";
     [ObservableProperty] private string _homeLabelText = "";
+    [ObservableProperty] private string _homeHint = "";
     [ObservableProperty] private bool _showHomes = true;
+
+    /// <summary>补签日期选择器的上限（不能选未来）</summary>
+    public DateTime Today => DateTime.Today;
 
     public List<GameData.ServerInfo> Servers { get; } = GameData.AllServers.ToList();
 
@@ -35,6 +39,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _updateText = "";
     [ObservableProperty] private bool _hasUpdate;
     [ObservableProperty] private bool _showSettings;
+
+    // 空列表提示
+    [ObservableProperty] private bool _watchEmpty = true;
+    [ObservableProperty] private bool _salesEmpty = true;
+    [ObservableProperty] private string _salesEmptyText = "正在获取数据…";
+    [ObservableProperty] private string _salesCountText = "";
 
     /// <summary>是否显示直报状态（公开版编译时不含此功能）</summary>
     public bool ShowIngestStatus => BuildFlags.HasLocalIngest;
@@ -81,9 +91,18 @@ public partial class MainViewModel : ObservableObject
             UpdateText = _updates.UpdateAvailable ? $"新版本 v{_updates.LatestVersion} 可用" : "";
         });
 
-        // 默认选中有关注项的服务器，否则默认拉诺西亚
+        // 恢复上次的筛选/排序（先于服务器赋值，避免用默认筛选刷一遍列表）
+        var g = _config.Config.General;
+        _areaFilterIndex = g.AreaFilterIndex;
+        _sizeFilterIndex = g.SizeFilterIndex;
+        _regionFilterIndex = g.RegionFilterIndex;
+        _sortIndex = g.SortIndex;
+
+        // 上次浏览的服务器 → 有关注项的服务器 → 默认拉诺西亚
         var watchServer = _config.Config.WatchList.FirstOrDefault()?.Server;
-        SelectedServer = Servers.FirstOrDefault(s => s.Id == watchServer) ?? Servers.First(s => s.Id == 1042);
+        SelectedServer = Servers.FirstOrDefault(s => s.Id == g.LastServer)
+                         ?? Servers.FirstOrDefault(s => s.Id == watchServer)
+                         ?? Servers.First(s => s.Id == 1042);
         HomeServer = SelectedServer;
 
         RefreshWatchList();
@@ -100,13 +119,26 @@ public partial class MainViewModel : ObservableObject
         if (value == null) return;
         _polling.BrowsingServer = value.Id;
         RefreshSalesList();
+        SaveUi();
         _ = _polling.RefreshNowAsync(value.Id);
     }
 
-    partial void OnAreaFilterIndexChanged(int value) => RefreshSalesList();
-    partial void OnSizeFilterIndexChanged(int value) => RefreshSalesList();
-    partial void OnRegionFilterIndexChanged(int value) => RefreshSalesList();
-    partial void OnSortIndexChanged(int value) => RefreshSalesList();
+    partial void OnAreaFilterIndexChanged(int value) { RefreshSalesList(); SaveUi(); }
+    partial void OnSizeFilterIndexChanged(int value) { RefreshSalesList(); SaveUi(); }
+    partial void OnRegionFilterIndexChanged(int value) { RefreshSalesList(); SaveUi(); }
+    partial void OnSortIndexChanged(int value) { RefreshSalesList(); SaveUi(); }
+
+    /// <summary>记住当前浏览的服务器与筛选条件</summary>
+    private void SaveUi()
+    {
+        var g = _config.Config.General;
+        g.LastServer = SelectedServer?.Id ?? g.LastServer;
+        g.AreaFilterIndex = AreaFilterIndex;
+        g.SizeFilterIndex = SizeFilterIndex;
+        g.RegionFilterIndex = RegionFilterIndex;
+        g.SortIndex = SortIndex;
+        _config.Save();
+    }
 
     [RelayCommand]
     private void ToggleTop() => AlwaysOnTop = !AlwaysOnTop;
@@ -142,11 +174,24 @@ public partial class MainViewModel : ObservableObject
     private void AddHome()
     {
         if (HomeServer == null) return;
-        if (!int.TryParse(HomeSlotText, out var slot) || slot < 1 || slot > 30) return;
-        if (!int.TryParse(HomePlotText, out var plot) || plot < 1 || plot > 60) return;
+        if (!int.TryParse(HomeSlotText, out var slot) || slot < 1 || slot > 30)
+        {
+            HomeHint = "区号填 1-30";
+            return;
+        }
+        if (!int.TryParse(HomePlotText, out var plot) || plot < 1 || plot > 60)
+        {
+            HomeHint = "房号填 1-60";
+            return;
+        }
 
         var key = new HouseKey(HomeServer.Id, HomeAreaIndex, slot - 1, plot);
-        if (_config.Config.Homes.Any(h => h.Key == key)) return;
+        if (_config.Config.Homes.Any(h => h.Key == key))
+        {
+            HomeHint = "这套房已经登记过了";
+            return;
+        }
+        HomeHint = "";
 
         _config.Config.Homes.Add(new HomeEntry
         {
@@ -166,6 +211,8 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void RemoveHome(HomeViewModel item)
     {
+        if (MessageBox.Show($"移除「{item.PositionText}」？打卡记录会一并删除。", "确认移除",
+                MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         _config.Config.Homes.RemoveAll(h => h.Key == item.Item.Key);
         _config.Save();
         _reminders.Recompute();
@@ -184,9 +231,18 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void BackfillHome(HomeViewModel item)
     {
-        if (item.BackfillDate == null) return;
+        if (item.BackfillDate == null)
+        {
+            HomeHint = "先选进房日期再补签";
+            return;
+        }
         var date = item.BackfillDate.Value.Date;
-        if (date > DateTime.Today) return; // 不允许未来日期
+        if (date > DateTime.Today)
+        {
+            HomeHint = "进房日期不能填未来";
+            return;
+        }
+        HomeHint = "";
         item.Item.LastEnteredAt = new DateTimeOffset(date, TimeSpan.Zero).ToUnixTimeSeconds();
         _config.Save();
         _reminders.Recompute();
@@ -196,11 +252,51 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void DemolishHome(HomeViewModel item)
     {
-        // 标记/取消炸房（开始旧家具 35 天保管倒计时）
-        item.Item.DemolishedAt = item.Item.DemolishedAt > 0 ? 0 : DateTimeOffset.Now.ToUnixTimeSeconds();
+        // 取消炸房 / 标记炸房（选了日期就按那天起算，否则按现在）
+        if (item.Item.DemolishedAt > 0)
+        {
+            item.Item.DemolishedAt = 0;
+        }
+        else
+        {
+            var ts = DemolishTimestamp(item);
+            if (ts == null) return;
+            item.Item.DemolishedAt = ts.Value;
+        }
+        HomeHint = "";
         _config.Save();
         _reminders.Recompute();
         RefreshHomes();
+    }
+
+    [RelayCommand]
+    private void SetDemolishDate(HomeViewModel item)
+    {
+        if (item.BackfillDate == null)
+        {
+            HomeHint = "先选炸房日期";
+            return;
+        }
+        var ts = DemolishTimestamp(item);
+        if (ts == null) return;
+        item.Item.DemolishedAt = ts.Value;
+        HomeHint = "";
+        _config.Save();
+        _reminders.Recompute();
+        RefreshHomes();
+    }
+
+    /// <summary>所选日期的 unix 秒；没选=现在；选了未来日期返回 null 并提示</summary>
+    private long? DemolishTimestamp(HomeViewModel item)
+    {
+        if (item.BackfillDate == null) return DateTimeOffset.Now.ToUnixTimeSeconds();
+        var date = item.BackfillDate.Value.Date;
+        if (date > DateTime.Today)
+        {
+            HomeHint = "炸房日期不能填未来";
+            return null;
+        }
+        return new DateTimeOffset(date, TimeSpan.Zero).ToUnixTimeSeconds();
     }
 
     private void RefreshAll()
@@ -223,15 +319,19 @@ public partial class MainViewModel : ObservableObject
         WatchList.Clear();
         foreach (var (w, _) in sorted)
             WatchList.Add(new WatchViewModel(w, _store, _reminders, now));
+        WatchEmpty = WatchList.Count == 0;
     }
 
     private void RefreshSalesList()
     {
         SalesList.Clear();
+        SalesEmpty = true;
+        SalesCountText = "";
         if (SelectedServer == null) return;
 
         var now = DateTimeOffset.Now;
-        var sales = _store.GetServerSales(SelectedServer.Id)
+        var all = _store.GetServerSales(SelectedServer.Id);
+        var sales = all
             .Where(s => s.Data.PurchaseType == (int)PurchaseType.Lottery || s.Data.PurchaseType == (int)PurchaseType.FCFS)
             .Where(s => AreaFilter < 0 || s.Data.Area == AreaFilter)
             .Where(s => SizeFilter < 0 || s.Data.EffectiveSize == SizeFilter)
@@ -251,6 +351,10 @@ public partial class MainViewModel : ObservableObject
         var watched = _config.Config.WatchList.Select(w => w.Key).ToHashSet();
         foreach (var s in ordered)
             SalesList.Add(new HouseItemViewModel(s, watched.Contains(s.Data.Key), now));
+
+        SalesEmpty = SalesList.Count == 0;
+        SalesCountText = SalesList.Count > 0 ? $"　共 {SalesList.Count} 套" : "";
+        SalesEmptyText = all.Count == 0 ? "正在获取数据…" : "没有符合条件的房屋，放宽筛选条件试试";
     }
 
     [RelayCommand]

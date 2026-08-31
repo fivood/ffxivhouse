@@ -97,6 +97,15 @@ const DEPOSIT_DAYS = 90;
 /** 炸房后旧家具保管期限（天） */
 const FURNITURE_DAYS = 35;
 
+/** YYYY-MM-DD → 北京时间当天 00:00 的 unix 秒（保守，提醒偏早不偏晚）；非法/未来返回错误 */
+function parseDayStart(date: string): { ts: number } | { error: string } {
+  const dm = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!dm) return { error: '日期格式应为 YYYY-MM-DD' };
+  const ts = Math.floor((Date.UTC(+dm[1], +dm[2] - 1, +dm[3]) - 8 * 3600 * 1000) / 1000);
+  if (ts > Math.floor(Date.now() / 1000)) return { error: '不能填未来的日期' };
+  return { ts };
+}
+
 interface UserSub {
   chatId: number;
   leadHours: number[];
@@ -297,10 +306,10 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 
 提醒时机：报名截止前 / 开奖 / 公示期领房死线 / 下轮开抽
 
-炸房提醒（45 天未进房拆除）：
+炸房提醒（45 天未进屋拆除）：
 /myhome 服务器 房区 区号 房号 [角色名] — 登记我的房产
 　例：/myhome 萌芽池 白银乡 14 43 阿光
-/entered [序号] [日期] — 进房打卡；带日期=补签（如 /entered 1 8-30）
+/entered [序号] [日期] — 进屋打卡；带日期=补签（如 /entered 1 8-30）
 /demolished [序号] — 标记房子已被拆除（开始旧家具 35 天保管倒计时），再发一次取消
 /homes — 我的房产与炸房倒计时
 
@@ -538,8 +547,8 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
       await saveSub(env, sub);
       await tgSend(env, chatId,
         `🏠 已登记：${server.name} ${AREA_NAMES[area]} ${slot}区 ${plotId}号（${label || '我的房'}）\n` +
-        `已按现在起算 ${DEMOLITION_DAYS} 天倒计时。如果最近没进过房，进房后发 /entered 校准。\n` +
-        `提醒：45 天未进房会进入拆除准备，以游戏内规则为准。`);
+        `已按现在起算 ${DEMOLITION_DAYS} 天倒计时。如果最近没进过屋，进屋后发 /entered 校准。\n` +
+        `提醒：45 天未进屋会进入拆除准备，以游戏内规则为准。`);
       return;
     }
 
@@ -616,7 +625,7 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
       if (h.demolishedAt && h.demolishedAt > 0) {
         h.demolishedAt = 0;
         await saveSub(env, sub);
-        await tgSend(env, chatId, `已取消「${h.label}」的炸房标记，恢复进房倒计时。`);
+        await tgSend(env, chatId, `已取消「${h.label}」的炸房标记，恢复进屋倒计时。`);
       } else {
         h.demolishedAt = Math.floor(Date.now() / 1000);
         h.fired = [];
@@ -643,12 +652,12 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
           const days = Math.floor((fDeadline - nowSec) / 86400);
           return `${pos}\n　💥 已炸房，旧家具保管${days >= 0 ? `还剩 ${days} 天` : '已到期！'}（${fmtTime(fDeadline).slice(0, 5)} 到期）`;
         }
-        if (h.lastEnteredAt <= 0) return `${pos}\n　进房时间未知，进房后发 /entered ${i + 1}`;
+        if (h.lastEnteredAt <= 0) return `${pos}\n　进屋时间未知，进屋后发 /entered ${i + 1}`;
         const deadline = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
         const remain = deadline - nowSec;
         const days = Math.floor(remain / 86400);
         const mark = days <= 5 ? '🔴' : days <= 10 ? '🟠' : '🟢';
-        return `${pos}\n　${mark} 剩余 ${days} 天（最后进房 ${fmtTime(h.lastEnteredAt)}）`;
+        return `${pos}\n　${mark} 剩余 ${days} 天（最后进屋 ${fmtTime(h.lastEnteredAt)}）`;
       });
       await tgSend(env, chatId, lines.join('\n'));
       return;
@@ -746,7 +755,7 @@ async function runReminders(env: Env): Promise<void> {
         due.push({
           chatId: sub.chatId,
           title: `🚨 炸房警告：还剩 ${days} 天`,
-          body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进房！${days <= 1 ? '今天必须进房，否则将进入拆除流程！' : '记得上线进一次房（进入室内才算）。'}\n进房后点下方按钮或发 /entered 打卡。`,
+          body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进屋！${days <= 1 ? '今天必须进屋，否则将进入拆除流程！' : '记得上线进一次屋（进入室内才算）。'}\n进屋后点下方按钮或发 /entered 打卡。`,
           homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
         });
       }
@@ -758,7 +767,7 @@ async function runReminders(env: Env): Promise<void> {
         due.push({
           chatId: sub.chatId,
           title: '🚨 炸房倒计时已到',
-          body: `${pos}\n已超过 ${DEMOLITION_DAYS} 天未进房，可能已进入拆除流程！请立即上线进房抢救！`,
+          body: `${pos}\n已超过 ${DEMOLITION_DAYS} 天未进屋，可能已进入拆除流程！请立即上线进屋抢救！`,
           homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
         });
       }
@@ -826,7 +835,7 @@ async function runReminders(env: Env): Promise<void> {
       if (r.homeRef) {
         const ref = r.homeRef;
         await tgSendWithButton(env, r.chatId, `${r.title}\n\n${r.body}`,
-          '✅ 已进房（重置倒计时）', `entered:${ref.server}:${ref.area}:${ref.slot}:${ref.id}`);
+          '✅ 已进屋（重置倒计时）', `entered:${ref.server}:${ref.area}:${ref.slot}:${ref.id}`);
       } else {
         await tgSend(env, r.chatId, `${r.title}\n\n${r.body}`);
       }
@@ -1044,33 +1053,27 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (!home) return json({ error: '未找到该房产' }, 404);
 
     // 可选补签日期（YYYY-MM-DD），按北京时间当天 00:00 起算（保守，提醒偏早不偏晚）
-    if (body.date) {
-      const dm = body.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (!dm) return json({ error: '日期格式应为 YYYY-MM-DD' }, 400);
-      const ts = Math.floor((Date.UTC(+dm[1], +dm[2] - 1, +dm[3]) - 8 * 3600 * 1000) / 1000);
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (ts > nowSec) return json({ error: '不能填未来的日期' }, 400);
-      home.lastEnteredAt = ts;
-    } else {
-      home.lastEnteredAt = Math.floor(Date.now() / 1000);
-    }
+    const day = body.date ? parseDayStart(body.date) : null;
+    if (day && 'error' in day) return json(day, 400);
+    home.lastEnteredAt = day ? day.ts : Math.floor(Date.now() / 1000);
     home.fired = [];
     await saveSub(env, sub);
     return json({ ok: true });
   }
 
   if (path === '/api/demolished' && request.method === 'POST') {
-    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number; date?: string };
     const chatId = await checkAuthBody(env, body);
     if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
     const sub = await getSub(env, chatId);
     const home = (sub.homes ?? []).find(h =>
       h.server === body.server && h.area === body.area && h.slot === body.slot && h.id === body.id);
     if (!home) return json({ error: '未找到该房产' }, 404);
-    // 标记/取消炸房
-    home.demolishedAt = (home.demolishedAt && home.demolishedAt > 0)
-      ? 0
-      : Math.floor(Date.now() / 1000);
+    // 带日期=按该日期标记/更正炸房日；不带=在标记与取消之间切换
+    const day = body.date ? parseDayStart(body.date) : null;
+    if (day && 'error' in day) return json(day, 400);
+    home.demolishedAt = day ? day.ts
+      : (home.demolishedAt && home.demolishedAt > 0) ? 0 : Math.floor(Date.now() / 1000);
     home.fired = [];
     await saveSub(env, sub);
     return json({ ok: true, demolishedAt: home.demolishedAt });

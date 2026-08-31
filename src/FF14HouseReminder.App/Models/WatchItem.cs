@@ -88,6 +88,13 @@ public class GeneralSettings
         "https://api.github.com/repos/fivood/ffxivhouse/releases/latest";
 
     public bool FirstRunCompleted { get; set; }
+
+    // 界面记忆：下次打开还是上次看的服务器/筛选/排序
+    public int LastServer { get; set; }
+    public int AreaFilterIndex { get; set; }
+    public int SizeFilterIndex { get; set; }
+    public int RegionFilterIndex { get; set; }
+    public int SortIndex { get; set; }
 }
 
 public class AppConfig

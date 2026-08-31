@@ -58,7 +58,7 @@ public partial class WatchViewModel : ObservableObject
 
     public string DisplayName => Item.DisplayName;
     public string ModeText => Item.Mode == WatchMode.Planned ? "计划抽" : "已报名";
-    public string ToggleModeText => Item.Mode == WatchMode.Planned ? "标记已报名" : "改回计划抽";
+    public string ToggleModeText => Item.Mode == WatchMode.Planned ? "🏳 标记已报名" : "✔ 改回计划抽";
     public string SizeName => GameData.GetSizeName(GameData.GetSize(Item.Area, Item.Id));
 
     public void Refresh(DateTimeOffset now)
@@ -114,6 +114,11 @@ public partial class HomeViewModel : ObservableObject
 
     public string PositionText => Item.PositionText;
     public string Label => Item.Label;
+    /// <summary>炸房按钮文案（再点一次取消）</summary>
+    public string DemolishText => Item.DemolishedAt > 0 ? "↺ 取消炸房" : "💥 我房炸了";
+    /// <summary>没炸房时才显示打卡/补签</summary>
+    public bool NotDemolished => Item.DemolishedAt <= 0;
+    public bool Demolished => Item.DemolishedAt > 0;
 
     public void Refresh(DateTimeOffset now)
     {
@@ -126,21 +131,30 @@ public partial class HomeViewModel : ObservableObject
                 ? $"💥 已炸房，旧家具保管还剩 {fDays} 天（{Item.FurnitureDeadline.LocalDateTime:MM-dd} 到期）"
                 : "💥 已炸房，旧家具保管已到期！";
             StatusColor = fDays <= 1 ? "#B03030" : fDays <= 5 ? "#B06030" : "#7B5EA7";
+            NotifyDemolishState();
             return;
         }
 
+        NotifyDemolishState();
         if (Item.LastEnteredAt <= 0)
         {
-            StatusText = "进房时间未知，进房后打卡";
+            StatusText = "进屋时间未知，进屋后打卡";
             StatusColor = "#8A8A80";
             return;
         }
         var remain = Item.Deadline - now;
         var days = (int)Math.Floor(remain.TotalDays);
         StatusText = days >= 0
-            ? $"剩余 {days} 天（最后进房 {Item.Deadline.AddDays(-45).LocalDateTime:MM-dd}）"
-            : "已超过 45 天未进房！";
+            ? $"剩余 {days} 天（最后进屋 {Item.Deadline.AddDays(-45).LocalDateTime:MM-dd}）"
+            : "已超过 45 天未进屋！";
         StatusColor = days <= 1 ? "#B03030" : days <= 5 ? "#B06030" : days <= 10 ? "#A66A00" : "#4C7A34";
+    }
+
+    private void NotifyDemolishState()
+    {
+        OnPropertyChanged(nameof(DemolishText));
+        OnPropertyChanged(nameof(NotDemolished));
+        OnPropertyChanged(nameof(Demolished));
     }
 }
 
@@ -166,7 +180,7 @@ public partial class HouseItemViewModel : ObservableObject
     public string PriceText => $"{Snapshot.Data.Price:N0} 金币";
     public string Badges => $"{Snapshot.Data.PurchaseTypeText} · {Snapshot.Data.RegionTypeText}" +
                             (Snapshot.Source == HouseDataSource.Local ? " · 📡" : "");
-    public string WatchButtonText => IsWatched ? "已关注" : "＋关注";
+    public string WatchButtonText => IsWatched ? "✔ 已关注" : "✚ 关注";
 
     public void Refresh(DateTimeOffset now)
     {
