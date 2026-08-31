@@ -49,6 +49,14 @@
   .empty { padding: 16px; text-align: center; color: var(--dim); }
   .sticky-top { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
   #watchList { max-height: 38vh; overflow-y: auto; }
+  /* 卡片悬停反馈 + 悬停才显示关注按钮（触屏设备常显） */
+  .item { transition: background .12s; }
+  @media (hover: hover) and (pointer: fine) {
+    .item:hover { background: #F5F5EC; }
+    .sales-item { cursor: pointer; }
+    .watch-btn:not([disabled]) { visibility: hidden; }
+    .sales-item:hover .watch-btn { visibility: visible; }
+  }
   .footer { color: var(--dim); font-size: 11px; text-align: center; margin: 12px 0; }
   .footer a { color: var(--olive); }
   .warn { color: var(--red); font-size: 12px; }
@@ -68,6 +76,11 @@
 <div class="row">
   <h1>抽房了吗 <em>FF14 房屋抽签提醒</em></h1>
   <button onclick="refreshAll()">↻ 刷新</button>
+</div>
+<div class="meta" style="margin:2px 0 4px">
+  数据来源 <a href="https://house.ffxiv.cyou" target="_blank">艾欧泽亚售楼中心</a>（玩家上报，可能延迟）
+  · 提醒由 @fivood_house_bot 推送
+  · <a href="https://github.com/fivood/ffxivhouse/releases/latest" target="_blank">下载桌面版</a>
 </div>
 
 <!-- 未绑定提示 -->
@@ -137,9 +150,7 @@
 <div class="panel" id="salesList"><div class="empty">加载中…</div></div>
 
 <div class="footer">
-  数据来源 <a href="https://house.ffxiv.cyou" target="_blank">艾欧泽亚售楼中心</a>（玩家上报，可能延迟）<br>
-  提醒由 Telegram Bot @fivood_house_bot 推送<br>
-  💻 Windows 桌面版（本地通知+更多设置）：<a href="https://github.com/fivood/ffxivhouse/releases/latest" target="_blank">下载最新版</a>
+  本工具与 Square Enix、盛趣游戏无关
 </div>
 
 <div id="toast"></div>
@@ -289,9 +300,9 @@ function renderSales() {
     const isW = watched.has(key);
     const state = `<span class="state" style="color:${STATE_COLOR[h.state]}">${h.stateName}</span>` +
       (h.estimated ? ' <span class="est">（推测）</span>' : '');
-    return `<div class="item">
+    return `<div class="item sales-item">
       <div class="row"><span class="title">${h.areaName} ${h.slotNo}区 ${h.id}号 [${h.size}]</span>
-        <button ${isW ? 'disabled' : ''} onclick="watch('${key}')">${isW ? '已关注' : '＋关注'}</button></div>
+        <button class="watch-btn" ${isW ? 'disabled' : ''} onclick="watch('${key}')">${isW ? '已关注' : '＋关注'}</button></div>
       <div><span class="price">${h.price.toLocaleString()} 金币</span>
         <span class="badge"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] || ''} · ${h.participate}人参与</span></div>
       <div>${state} <span class="countdown" style="color:${URGENCY(h.phaseEnd)}">${fmtRemain(h.phaseEnd)}</span>
