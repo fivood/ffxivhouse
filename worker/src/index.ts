@@ -86,23 +86,42 @@ interface UserSub {
 
 interface Phase { state: number; end: number; estimated: boolean }
 
-// ═══════════════ 周期计算（与桌面端一致：9 天 = 申请 5 天 + 公示 4 天） ═══════════════
+// ═══════════════ 周期计算（与售楼中心前端算法对齐） ═══════════════
+// 国服抽签周期 9 天 = 申请期 5 天 + 公示期 4 天，每天北京时间 23:00 切换阶段
+// 锚点：2022-08-08 23:00:00 +0800（一个公示期结束/周期边界）
 
+const ANCHOR_SEC = 1659970800;
 const CYCLE_SEC = 9 * 86400;
-const ENTRY_SEC = 5 * 86400;
+const ENTRY_SEC = 5 * 86400;   // 申请期时长
+const RESULTS_SEC = 4 * 86400; // 公示期时长
 
 function getPhase(house: HouseEntry, nowSec: number): Phase {
   if (house.State !== 0 && house.EndTime > 0) {
-    return { state: house.State, end: house.EndTime, estimated: false };
+    // 已知阶段，但时间可能已过：按周期向后滚动（与网站一致）
+    let state = house.State;
+    let end = house.EndTime;
+    while (nowSec >= end) {
+      if (state === 1) { end += RESULTS_SEC; state = 2; }        // 申请期 → 公示期
+      else if (state === 2 || state === 3) { end += ENTRY_SEC; state = 1; } // → 下轮申请期
+      else break;
+    }
+    return { state, end, estimated: false };
   }
-  const t0 = Math.min(house.FirstSeen, nowSec);
-  const cycles = Math.floor((nowSec - t0) / CYCLE_SEC);
-  const cycleStart = t0 + cycles * CYCLE_SEC;
-  const entryEnd = cycleStart + ENTRY_SEC;
-  const cycleEnd = cycleStart + CYCLE_SEC;
-  return nowSec < entryEnd
-    ? { state: 1, end: entryEnd, estimated: true }
-    : { state: 2, end: cycleEnd, estimated: true };
+
+  // 无抽签信息（State=0）：对齐周期锚点推测
+  let boundary = ANCHOR_SEC;
+  const firstSeen = Math.min(house.FirstSeen, nowSec);
+  while (boundary > firstSeen + CYCLE_SEC) boundary -= CYCLE_SEC;
+  while (boundary < firstSeen) boundary += CYCLE_SEC;
+
+  if (nowSec < boundary) {
+    // 还没到下个周期边界：准备期，等待开抽
+    return { state: 3, end: boundary, estimated: true };
+  }
+  while (nowSec > boundary + CYCLE_SEC) boundary += CYCLE_SEC;
+  return nowSec < boundary + ENTRY_SEC
+    ? { state: 1, end: boundary + ENTRY_SEC, estimated: true }
+    : { state: 2, end: boundary + CYCLE_SEC, estimated: true };
 }
 
 // ═══════════════ 售楼中心 API（KV 缓存 5 分钟） ═══════════════
