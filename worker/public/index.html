@@ -61,6 +61,25 @@
     .watch-btn:not([disabled]) { visibility: hidden; }
     .sales-item:hover .watch-btn { visibility: visible; }
   }
+  /* 关注按钮：行内水平居中 + 交互态 */
+  .watch-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 62px; text-align: center; transition: background .12s, transform .05s;
+  }
+  .watch-btn:hover:not(:disabled) { background: var(--strip); }
+  .watch-btn:active:not(:disabled) { transform: translateY(1px); background: var(--link); color: #fff; border-color: var(--link); }
+  /* 纯图标按钮 */
+  .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 5px 8px; }
+  .icon-btn svg { display: block; }
+  .icon-btn.on { background: var(--link); color: #fff; border-color: var(--link); }
+  /* 提醒时间多选片 */
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0; }
+  .chip {
+    padding: 4px 10px; border: 1px solid var(--border); background: #F2F2EB;
+    font-size: 12px; cursor: pointer; user-select: none; transition: background .12s;
+  }
+  .chip:hover { background: var(--white); }
+  .chip.on { background: var(--link); color: #fff; border-color: var(--link); }
   .footer { color: var(--dim); font-size: 11px; text-align: center; margin: 12px 0; }
   .footer a { color: var(--link); }
   .footer a:hover { color: var(--link-hover); }
@@ -112,22 +131,25 @@
 <div id="watchSection" style="display:none">
   <div class="strip">⊙ 推送设置</div>
   <div class="panel bind-box">
-    截止前提醒提前量（小时，逗号分隔）：
-    <div class="row">
-      <input type="text" id="leadInput" class="lead-input" placeholder="如 24,1">
-      <button onclick="saveLead()">💾 保存</button>
-    </div>
+    截止前提醒（点选时间片，即时生效）：
+    <div class="chips" id="leadChips"></div>
+    <span class="meta">可多选；微信渠道有频率限制（约 20 条/天），建议不超过 3 个</span>
     <br>
     <b>微信推送（可选）</b>：除 Telegram 外，同时推送到微信<br>
-    <span class="meta">① 微信扫右侧二维码 → ② 按提示获得 SPT_ 开头的令牌 → ③ 粘贴到下方</span>
-    <button onclick="toggleQr()" id="qrBtn" style="font-size:12px;padding:2px 8px;margin:2px 0">📷 显示二维码</button>
+    <span class="meta">① 微信扫二维码 → ② 按提示获得 SPT_ 开头的令牌 → ③ 粘贴到下方</span>
+    <button onclick="toggleQr()" id="qrBtn" class="icon-btn" title="显示/收起二维码" style="margin:2px 0">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h1v1h-1zM17 17h4v4h-4z" fill="currentColor" stroke="none"/></svg>
+      <span style="margin-left:4px">二维码</span>
+    </button>
     <div id="qrBox" style="display:none;text-align:center;padding:6px">
       <img src="https://wxpusher.zjiecode.com/api/qrcode/RwjGLMOPTYp35zSYQr0HxbCPrV9eU0wKVBXU1D5VVtya0cQXEJWPjqBdW3gKLifS.jpg"
            alt="WxPusher 二维码" style="width:180px;height:180px;border:1px solid var(--border)">
     </div>
     <div class="row">
       <input type="text" id="wxUidInput" placeholder="SPT_ 开头，留空则关闭微信推送" style="flex:1">
-      <button onclick="saveWxUid()">💾 保存</button>
+      <button onclick="saveWxUid()" class="icon-btn" title="保存微信推送设置">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      </button>
     </div>
     <span class="meta" id="wxUidStatus"></span>
   </div>
@@ -231,7 +253,8 @@ async function loadWatch() {
     }
     const data = await resp.json();
     myWatches = data.items || [];
-    $('leadInput').value = (data.leadHours || []).join(',');
+    leadHours = data.leadHours || [24, 1];
+    renderChips();
     $('wxUidInput').value = data.wxpusherSpt || '';
     $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
     $('bindPanel').style.display = 'none';
@@ -349,18 +372,34 @@ async function toggleMode(key) {
   await api('POST', '/api/mode', parseKey(key));
   await loadWatch();
 }
-async function saveLead() {
-  const hours = $('leadInput').value.split(/[,，]/).map(s => parseInt(s.trim())).filter(h => !isNaN(h));
-  if (!hours.length) return toast('格式如 24,1');
-  await api('POST', '/api/lead', { hours });
-  toast('提前量已保存');
+// 提前量时间片
+const LEAD_PRESETS = [72, 48, 24, 12, 6, 3, 1];
+let leadHours = [24, 1];
+
+function renderChips() {
+  $('leadChips').innerHTML = LEAD_PRESETS.map(h =>
+    `<span class="chip ${leadHours.includes(h) ? 'on' : ''}" data-h="${h}" onclick="toggleChip(${h})">${h}h</span>`
+  ).join('');
+}
+
+async function toggleChip(h) {
+  if (leadHours.includes(h)) {
+    if (leadHours.length <= 1) return toast('至少保留一个提醒时间');
+    leadHours = leadHours.filter(x => x !== h);
+  } else {
+    if (leadHours.length >= 3) return toast('最多选 3 个（微信渠道有频率限制）');
+    leadHours = [...leadHours, h].sort((a, b) => b - a);
+  }
+  renderChips();
+  await api('POST', '/api/lead', { hours: leadHours });
+  toast('已保存：' + leadHours.join(', ') + 'h');
 }
 
 function toggleQr() {
   const box = $('qrBox');
   const showing = box.style.display !== 'none';
   box.style.display = showing ? 'none' : 'block';
-  $('qrBtn').textContent = showing ? '📷 显示二维码' : '📷 收起二维码';
+  $('qrBtn').classList.toggle('on', !showing);
 }
 
 async function saveWxUid() {

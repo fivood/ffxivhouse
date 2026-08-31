@@ -619,6 +619,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
     const hours = (body.hours ?? []).filter(h => typeof h === 'number' && h >= 0 && h <= 8760);
     if (hours.length === 0) return json({ error: 'hours 参数无效' }, 400);
+    if (hours.length > 3) return json({ error: '最多选 3 个提醒时间（微信渠道有频率限制）' }, 400);
     const sub = await getSub(env, chatId);
     sub.leadHours = [...new Set(hours)].sort((a, b) => b - a);
     await saveSub(env, sub);
