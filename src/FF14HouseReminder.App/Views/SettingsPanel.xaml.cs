@@ -22,7 +22,9 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         var r = _config.Config.Reminders;
         var p = _config.Config.Push;
 
-        LeadHoursText = string.Join(",", r.LeadHours);
+        // 勾选提前量时间片
+        foreach (var cb in LeadChips.Children.OfType<System.Windows.Controls.CheckBox>())
+            cb.IsChecked = r.LeadHours.Contains(int.Parse((string)cb.Tag));
         NotifyEntryDeadline = r.NotifyEntryDeadline;
         NotifyResultsStart = r.NotifyResultsStart;
         NotifyClaimDeadline = r.NotifyClaimDeadline;
@@ -49,7 +51,7 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
             IngestSection.Visibility = Visibility.Collapsed;
     }
 
-    public string LeadHoursText { get; set; } = "24,1";
+    public string LeadHoursText { get; set; } = ""; // 已弃用：提前量改用时间片勾选
     public bool NotifyEntryDeadline { get; set; }
     public bool NotifyResultsStart { get; set; }
     public bool NotifyClaimDeadline { get; set; }
@@ -181,10 +183,12 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         var r = _config.Config.Reminders;
         var p = _config.Config.Push;
 
-        r.LeadHours = LeadHoursText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => int.TryParse(s, out var h) ? Math.Clamp(h, 0, 8760) : (int?)null)
-            .Where(h => h.HasValue).Select(h => h!.Value).Distinct().OrderByDescending(h => h).ToList();
+        r.LeadHours = LeadChips.Children.OfType<System.Windows.Controls.CheckBox>()
+            .Where(cb => cb.IsChecked == true)
+            .Select(cb => int.Parse((string)cb.Tag))
+            .OrderByDescending(h => h).ToList();
         if (r.LeadHours.Count == 0) r.LeadHours = [24, 1];
+        if (r.LeadHours.Count > 3) r.LeadHours = r.LeadHours.Take(3).ToList();
         r.NotifyEntryDeadline = NotifyEntryDeadline;
         r.NotifyResultsStart = NotifyResultsStart;
         r.NotifyClaimDeadline = NotifyClaimDeadline;

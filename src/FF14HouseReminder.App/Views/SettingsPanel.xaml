@@ -33,9 +33,17 @@
 
                 <TextBlock Text="⊙  设置" FontWeight="Bold" FontSize="15" Foreground="#55554A"/>
 
-                <TextBlock Text="── 提醒规则" Style="{StaticResource H}"/>
-                <TextBlock Text="截止前提醒提前量（小时，逗号分隔，如 24,1）" TextWrapping="Wrap"/>
-                <TextBox Text="{Binding LeadHoursText}"/>
+            <TextBlock Text="── 提醒规则" Style="{StaticResource H}"/>
+            <TextBlock Text="截止前提醒（可多选，最多 3 个）" TextWrapping="Wrap"/>
+            <WrapPanel Margin="0,2,0,6" x:Name="LeadChips">
+                <CheckBox Content="72h" Tag="72" Margin="0,0,8,0"/>
+                <CheckBox Content="48h" Tag="48" Margin="0,0,8,0"/>
+                <CheckBox Content="24h" Tag="24" Margin="0,0,8,0"/>
+                <CheckBox Content="12h" Tag="12" Margin="0,0,8,0"/>
+                <CheckBox Content="6h" Tag="6" Margin="0,0,8,0"/>
+                <CheckBox Content="3h" Tag="3" Margin="0,0,8,0"/>
+                <CheckBox Content="1h" Tag="1" Margin="0,0,8,0"/>
+            </WrapPanel>
                 <CheckBox Content="申请期截止前提醒（快去报名）" IsChecked="{Binding NotifyEntryDeadline}"/>
                 <CheckBox Content="开奖提醒（进入公示期，仅已报名）" IsChecked="{Binding NotifyResultsStart}"/>
                 <CheckBox Content="公示期截止前提醒（领房/领回押金死线）" IsChecked="{Binding NotifyClaimDeadline}"/>
