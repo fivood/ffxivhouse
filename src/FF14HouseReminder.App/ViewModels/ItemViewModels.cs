@@ -19,7 +19,7 @@ public static class Countdown
     public static string StateColor(LotteryState state) => state switch
     {
         LotteryState.Available => "#4C7A34",     // 绿：可报名
-        LotteryState.ResultsPeriod => "#A66A00", // 琥珀：公示期
+        LotteryState.ResultsPeriod => "#7B5EA7", // 紫：公示期
         LotteryState.Preparing => "#3B5BA5",     // 蓝：准备期
         _ => "#8A8A80"                           // 灰：未知
     };

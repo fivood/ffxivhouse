@@ -82,6 +82,8 @@ interface UserSub {
   items: WatchItem[];
   /** 可选：WxPusher 极简推送 SPT（微信渠道） */
   wxpusherSpt?: string;
+  /** 可选：自定义昵称（网页顶部显示） */
+  nickname?: string;
 }
 
 interface Phase { state: number; end: number; estimated: boolean }
@@ -236,6 +238,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /mode 序号 — 切换 计划抽/已报名
 /unwatch 序号 — 取消关注
 /lead 24,1 — 截止前提醒提前量（小时，逗号分隔）
+/name 名字 — 设置网页版显示的昵称
 /servers — 服务器列表
 /help — 本帮助
 
@@ -380,10 +383,33 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
         await tgSend(env, chatId, '格式：/lead 24,1（小时，逗号分隔）');
         return;
       }
+      if (hours.length > 3) {
+        await tgSend(env, chatId, '最多选 3 个提醒时间（微信渠道有频率限制）。');
+        return;
+      }
       const sub = await getSub(env, chatId);
       sub.leadHours = [...new Set(hours)].sort((a, b) => b - a);
       await saveSub(env, sub);
       await tgSend(env, chatId, `提前量已设为 ${sub.leadHours.join(',')} 小时。`);
+      return;
+    }
+
+    case '/name': {
+      const name = args.join(' ').trim();
+      const sub = await getSub(env, chatId);
+      if (!name) {
+        delete sub.nickname;
+        await saveSub(env, sub);
+        await tgSend(env, chatId, '已清除昵称。');
+        return;
+      }
+      if (name.length > 16) {
+        await tgSend(env, chatId, '昵称最长 16 个字符。');
+        return;
+      }
+      sub.nickname = name;
+      await saveSub(env, sub);
+      await tgSend(env, chatId, `昵称已设为「${name}」，网页版顶部会显示。`);
       return;
     }
 
@@ -564,6 +590,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json({
       leadHours: sub.leadHours,
       wxpusherSpt: sub.wxpusherSpt ?? '',
+      nickname: sub.nickname ?? '',
       items: await enrichWatch(env, sub),
     });
   }

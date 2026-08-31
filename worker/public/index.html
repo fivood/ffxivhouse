@@ -11,6 +11,7 @@
     --text: #3F3F38; --dim: #8A8A80; --olive: #8B8B5E;
     --link: #2d8c9d; --link-hover: #2bb1be;
     --green: #4C7A34; --amber: #A66A00; --blue: #3B5BA5; --red: #B03030; --orange: #B06030;
+    --purple: #7B5EA7;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   a { color: var(--link); }
@@ -40,10 +41,13 @@
   button {
     background: #F2F2EB; border: 1px solid var(--border); color: var(--text);
     padding: 5px 12px; font-size: 13px; cursor: pointer; font-family: inherit;
+    transition: background .12s, transform .05s;
   }
-  button:active { background: var(--white); }
+  button:hover:not(:disabled) { background: var(--white); border-color: var(--link); }
+  button:active:not(:disabled) { background: var(--white); transform: translateY(1px); }
   button.primary { background: var(--olive); color: #fff; border-color: var(--olive); }
-  button:disabled { color: var(--border); }
+  button.primary:hover:not(:disabled) { background: #9d9d6e; }
+  button:disabled { color: var(--border); cursor: default; }
   select, input[type=text] {
     border: 1px solid var(--border); padding: 5px 4px; font-size: 13px;
     background: var(--white); font-family: inherit; margin: 1px;
@@ -98,7 +102,7 @@
 <body>
 
 <div class="row">
-  <h1><img src="/icon-64.png" width="24" height="24" style="vertical-align:-4px;margin-right:4px">抽房了吗 <em>FF14 房屋抽签提醒</em></h1>
+  <h1><img src="/icon-64.png" width="24" height="24" style="vertical-align:-4px;margin-right:4px">抽房了吗 <em>FF14 房屋抽签提醒</em><span id="nickBadge" class="meta" style="margin-left:8px"></span></h1>
   <button onclick="refreshAll()">↻ 刷新</button>
 </div>
 <div class="meta" style="margin:2px 0 4px">
@@ -257,6 +261,7 @@ async function loadWatch() {
     renderChips();
     $('wxUidInput').value = data.wxpusherSpt || '';
     $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
+    $('nickBadge').textContent = data.nickname ? `👋 ${data.nickname}` : '';
     $('bindPanel').style.display = 'none';
     $('watchSection').style.display = 'block';
     $('watchSticky').style.display = 'block';
@@ -274,7 +279,7 @@ function fmtRemain(targetSec) {
   if (h >= 1) return `剩余 ${h} 小时 ${m} 分`;
   return `剩余 ${m} 分`;
 }
-const STATE_COLOR = ['#8A8A80', '#4C7A34', '#A66A00', '#3B5BA5'];
+const STATE_COLOR = ['#8A8A80', '#4C7A34', '#7B5EA7', '#3B5BA5'];
 const URGENCY = t => {
   const span = t - Date.now() / 1000;
   return span <= 3600 ? '#B03030' : span <= 86400 ? '#B06030' : '#3F3F38';
