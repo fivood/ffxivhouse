@@ -4,13 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>抽房了吗 - FF14 房屋抽签提醒</title>
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
 <style>
   :root {
-    --bg: #D8D8CF; --strip: #EBEBE4; --border: #ABABA0; --white: #FFF;
+    --bg: #eff1ee; --strip: #bed4db; --border: #ABABA0; --white: #FFF;
     --text: #3F3F38; --dim: #8A8A80; --olive: #8B8B5E;
+    --link: #2d8c9d; --link-hover: #2bb1be;
     --green: #4C7A34; --amber: #A66A00; --blue: #3B5BA5; --red: #B03030; --orange: #B06030;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  a { color: var(--link); }
+  a:hover { color: var(--link-hover); }
   body {
     background: var(--bg); color: var(--text);
     font-family: Tahoma, "Microsoft YaHei UI", sans-serif; font-size: 14px;
@@ -20,7 +24,7 @@
   h1 em { font-style: normal; font-size: 13px; color: var(--olive); }
   .strip {
     background: var(--strip); border: 1px solid var(--border);
-    padding: 5px 8px; font-weight: bold; color: #55554A; margin-top: 10px;
+    padding: 5px 8px; font-weight: bold; color: #3a4a52; margin-top: 10px;
     display: flex; justify-content: space-between; align-items: center;
   }
   .panel { background: var(--white); border: 1px solid var(--border); border-top: none; }
@@ -58,7 +62,8 @@
     .sales-item:hover .watch-btn { visibility: visible; }
   }
   .footer { color: var(--dim); font-size: 11px; text-align: center; margin: 12px 0; }
-  .footer a { color: var(--olive); }
+  .footer a { color: var(--link); }
+  .footer a:hover { color: var(--link-hover); }
   .warn { color: var(--red); font-size: 12px; }
   .est { color: var(--dim); font-size: 12px; }
   .bind-box { padding: 12px; }
@@ -74,7 +79,7 @@
 <body>
 
 <div class="row">
-  <h1>抽房了吗 <em>FF14 房屋抽签提醒</em></h1>
+  <h1><img src="/icon-64.png" width="24" height="24" style="vertical-align:-4px;margin-right:4px">抽房了吗 <em>FF14 房屋抽签提醒</em></h1>
   <button onclick="refreshAll()">↻ 刷新</button>
 </div>
 <div class="meta" style="margin:2px 0 4px">
@@ -110,15 +115,19 @@
     截止前提醒提前量（小时，逗号分隔）：
     <div class="row">
       <input type="text" id="leadInput" class="lead-input" placeholder="如 24,1">
-      <button onclick="saveLead()">保存</button>
+      <button onclick="saveLead()">💾 保存</button>
     </div>
     <br>
     <b>微信推送（可选）</b>：除 Telegram 外，同时推送到微信<br>
-    <span class="meta">① 微信打开 <a href="https://wxpusher.zjiecode.com/docs/spt.html" target="_blank">WxPusher 极简推送页</a>，扫页面上的 SPT 二维码
-    → ② 按提示获得 SPT_ 开头的令牌 → ③ 粘贴到这里</span>
+    <span class="meta">① 微信扫右侧二维码 → ② 按提示获得 SPT_ 开头的令牌 → ③ 粘贴到下方</span>
+    <button onclick="toggleQr()" id="qrBtn" style="font-size:12px;padding:2px 8px;margin:2px 0">📷 显示二维码</button>
+    <div id="qrBox" style="display:none;text-align:center;padding:6px">
+      <img src="https://wxpusher.zjiecode.com/api/qrcode/RwjGLMOPTYp35zSYQr0HxbCPrV9eU0wKVBXU1D5VVtya0cQXEJWPjqBdW3gKLifS.jpg"
+           alt="WxPusher 二维码" style="width:180px;height:180px;border:1px solid var(--border)">
+    </div>
     <div class="row">
       <input type="text" id="wxUidInput" placeholder="SPT_ 开头，留空则关闭微信推送" style="flex:1">
-      <button onclick="saveWxUid()">保存</button>
+      <button onclick="saveWxUid()">💾 保存</button>
     </div>
     <span class="meta" id="wxUidStatus"></span>
   </div>
@@ -345,6 +354,13 @@ async function saveLead() {
   if (!hours.length) return toast('格式如 24,1');
   await api('POST', '/api/lead', { hours });
   toast('提前量已保存');
+}
+
+function toggleQr() {
+  const box = $('qrBox');
+  const showing = box.style.display !== 'none';
+  box.style.display = showing ? 'none' : 'block';
+  $('qrBtn').textContent = showing ? '📷 显示二维码' : '📷 收起二维码';
 }
 
 async function saveWxUid() {
