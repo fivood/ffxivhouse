@@ -90,6 +90,7 @@ public class GeneralSettings
 public class AppConfig
 {
     public List<WatchItem> WatchList { get; set; } = [];
+    public List<HomeEntry> Homes { get; set; } = [];
     public ReminderSettings Reminders { get; set; } = new();
     public PushSettings Push { get; set; } = new();
     public GeneralSettings General { get; set; } = new();

@@ -52,7 +52,9 @@ public enum ReminderType
     /// <summary>公示期截止前（领房/领回押金死线）</summary>
     ClaimDeadline = 2,
     /// <summary>下轮申请期开始</summary>
-    NextEntryStart = 3
+    NextEntryStart = 3,
+    /// <summary>炸房警告（45 天未进房）</summary>
+    Demolition = 4
 }
 
 /// <summary>数据来源</summary>

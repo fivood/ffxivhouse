@@ -45,16 +45,16 @@ public class ReminderEngine
             var suffix = estimatedSuffix + staleSuffix;
             var pos = $"{house.ServerName} {house.PositionText} [{house.SizeName}]";
 
-            void Add(ReminderType type, int? leadHours, DateTimeOffset fireAt, string title, string body)
+            void Add(ReminderType type, int? leadHours, DateTimeOffset fireAt, DateTimeOffset anchorEnd, string keyPrefix, string title, string body)
             {
                 // 提前量早于现在但阶段尚未结束：立即提醒一次（用户新关注时常见）
-                if (fireAt <= now && phase.PhaseEnd > now) fireAt = now;
+                if (fireAt <= now && anchorEnd > now) fireAt = now;
                 if (fireAt <= now.AddSeconds(-60)) return; // 阶段已过的不再排期
-                var key = $"{watch.Key}|{(int)type}|{phase.PhaseEnd:yyyyMMddHHmmss}|{leadHours?.ToString() ?? "x"}";
+                var key = $"{keyPrefix}|{(int)type}|{anchorEnd:yyyyMMddHHmmss}|{leadHours?.ToString() ?? "x"}";
                 list.Add(new ScheduledReminder
                 {
                     Key = key,
-                    WatchKey = watch.Key.ToString(),
+                    WatchKey = keyPrefix,
                     Type = type,
                     FireAt = fireAt,
                     Title = title,
@@ -70,6 +70,7 @@ public class ReminderEngine
                         foreach (var h in settings.LeadHours)
                         {
                             Add(ReminderType.EntryDeadline, h, phase.PhaseEnd.AddHours(-h),
+                                phase.PhaseEnd, watch.Key.ToString(),
                                 "抽房报名即将截止",
                                 $"{pos} 申请期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止，想去抽记得上线报名！");
                         }
@@ -77,6 +78,7 @@ public class ReminderEngine
                     if (settings.NotifyResultsStart && watch.Mode == WatchMode.Participated)
                     {
                         Add(ReminderType.ResultsStart, null, phase.PhaseEnd,
+                            phase.PhaseEnd, watch.Key.ToString(),
                             "抽房结果已公布",
                             $"{pos} 进入公示期，你参与抽签的房子开奖了，快去查看结果！");
                     }
@@ -89,6 +91,7 @@ public class ReminderEngine
                         foreach (var h in settings.LeadHours)
                         {
                             Add(ReminderType.ClaimDeadline, h, phase.PhaseEnd.AddHours(-h),
+                                phase.PhaseEnd, watch.Key.ToString(),
                                 "领房/领回押金即将截止",
                                 $"{pos} 公示期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止。" +
                                 "中签请尽快购入；落选记得领回押金，逾期会有损失！");
@@ -100,11 +103,53 @@ public class ReminderEngine
                     if (settings.NotifyNextEntryStart && watch.Mode == WatchMode.Planned)
                     {
                         Add(ReminderType.NextEntryStart, null, phase.PhaseEnd,
+                            phase.PhaseEnd, watch.Key.ToString(),
                             "新一轮抽签开始",
                             $"{pos} 预计于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 开放抽签预约，想去抽记得上线！");
                     }
                     break;
             }
+        }
+
+        // ── 炸房提醒（45 天未进房）──
+        foreach (var home in _config.Config.Homes)
+        {
+            if (home.LastEnteredAt <= 0) continue;
+            var deadline = home.Deadline;
+            var homeKey = $"home:{home.Key}";
+            var pos = $"{home.PositionText}（{home.Label}）";
+
+            foreach (var days in DemolitionLeadDays)
+            {
+                Add2(ReminderType.Demolition, days, deadline.AddDays(-days), deadline, homeKey,
+                    $"炸房警告：还剩 {days} 天",
+                    $"{pos} 已超过 {45 - days} 天未进房！记得上线进一次房（进入室内才算），" +
+                    $"进房后在「我的房产」里打卡。死线：{deadline.LocalDateTime:MM-dd HH:mm}");
+            }
+            // 已过期：立即提醒一次
+            if (now >= deadline)
+            {
+                Add2(ReminderType.Demolition, 0, now, deadline, homeKey,
+                    "炸房倒计时已到",
+                    $"{pos} 已超过 45 天未进房，可能已进入拆除流程！请立即上线进房抢救！");
+            }
+        }
+
+        // 局部函数（炸房用，无 suffix）
+        void Add2(ReminderType type, int? leadDays, DateTimeOffset fireAt, DateTimeOffset anchorEnd, string keyPrefix, string title, string body)
+        {
+            if (fireAt <= now && anchorEnd > now) fireAt = now;
+            if (fireAt <= now.AddSeconds(-60)) return;
+            var key = $"{keyPrefix}|{(int)type}|{anchorEnd:yyyyMMddHHmmss}|{leadDays?.ToString() ?? "x"}";
+            list.Add(new ScheduledReminder
+            {
+                Key = key,
+                WatchKey = keyPrefix,
+                Type = type,
+                FireAt = fireAt,
+                Title = title,
+                Body = body
+            });
         }
 
         lock (_lock)
