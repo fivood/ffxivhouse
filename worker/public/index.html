@@ -47,6 +47,8 @@
   .filters { background: var(--strip); border: 1px solid var(--border); border-top: none;
              display: flex; flex-wrap: wrap; padding: 2px; }
   .empty { padding: 16px; text-align: center; color: var(--dim); }
+  .sticky-top { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+  #watchList { max-height: 38vh; overflow-y: auto; }
   .footer { color: var(--dim); font-size: 11px; text-align: center; margin: 12px 0; }
   .footer a { color: var(--olive); }
   .warn { color: var(--red); font-size: 12px; }
@@ -63,7 +65,10 @@
 </head>
 <body>
 
-<h1>抽房了吗 <em>FF14 房屋抽签提醒</em></h1>
+<div class="row">
+  <h1>抽房了吗 <em>FF14 房屋抽签提醒</em></h1>
+  <button onclick="refreshAll()">↻ 刷新</button>
+</div>
 
 <!-- 未绑定提示 -->
 <div id="bindPanel" style="display:none">
@@ -79,14 +84,14 @@
   </div>
 </div>
 
-<!-- 我的关注 -->
-<div id="watchSection" style="display:none">
-  <div class="strip">
-    <span>⊙ 我的关注</span>
-    <button onclick="loadWatch()">↻</button>
-  </div>
+<!-- 我的关注（吸顶，需直接挂在 body 下才能整页吸附） -->
+<div id="watchSticky" class="sticky-top" style="display:none">
+  <div class="strip"><span>⊙ 我的关注</span></div>
   <div class="panel" id="watchList"><div class="empty">加载中…</div></div>
+</div>
 
+<!-- 推送设置（跟随关注区显示，但不吸顶） -->
+<div id="watchSection" style="display:none">
   <div class="strip">⊙ 推送设置</div>
   <div class="panel bind-box">
     截止前提醒提前量（小时，逗号分隔）：
@@ -109,7 +114,6 @@
 <!-- 在售房屋 -->
 <div class="strip">
   <span>⊙ 在售房屋</span>
-  <button onclick="loadSales(true)">↻ 刷新</button>
 </div>
 <div class="filters">
   <select id="selServer"></select>
@@ -198,11 +202,11 @@ async function loadSales(manual) {
 }
 
 async function loadWatch() {
-  if (!authed()) { $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; return; }
+  if (!authed()) { $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; $('watchSticky').style.display = 'none'; return; }
   try {
     const resp = await fetch(`/api/watch?${qs()}`);
     if (resp.status === 401) {
-      $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none';
+      $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; $('watchSticky').style.display = 'none';
       return;
     }
     const data = await resp.json();
@@ -212,6 +216,7 @@ async function loadWatch() {
     $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
     $('bindPanel').style.display = 'none';
     $('watchSection').style.display = 'block';
+    $('watchSticky').style.display = 'block';
     renderWatch();
     renderSales(); // 刷新关注按钮状态
   } catch { /* 网络错误静默 */ }
@@ -296,6 +301,10 @@ function renderSales() {
 }
 
 // ── 操作 ──
+function refreshAll() {
+  loadSales(true);
+  loadWatch();
+}
 async function api(method, path, body) {
   const resp = await fetch(path, {
     method, headers: { 'Content-Type': 'application/json' },
