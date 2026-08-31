@@ -179,6 +179,7 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
                                 <Button Content="{Binding ToggleModeText}" Style="{StaticResource RetroBtn}"
                                         Margin="0,0,0,3"
+                                        Visibility="{Binding CanToggleMode, Converter={StaticResource BoolToVis}}"
                                         Command="{Binding DataContext.ToggleWatchModeCommand,
                                             RelativeSource={RelativeSource AncestorType=ListBox}}"
                                         CommandParameter="{Binding}"/>

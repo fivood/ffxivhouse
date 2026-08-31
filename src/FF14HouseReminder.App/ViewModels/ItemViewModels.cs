@@ -46,6 +46,8 @@ public partial class WatchViewModel : ObservableObject
     [ObservableProperty] private string _sourceText = "";
     [ObservableProperty] private string _stateColor = "#8A8A80";
     [ObservableProperty] private string _countdownColor = "#3F3F38";
+    /// <summary>仅申请期允许切换报名状态（准备期/公示期防止误点）</summary>
+    [ObservableProperty] private bool _canToggleMode;
 
     public WatchViewModel(WatchItem item, DataStore store, ReminderEngine reminders, DateTimeOffset now)
     {
@@ -84,6 +86,7 @@ public partial class WatchViewModel : ObservableObject
             _ => ""
         };
         SourceText = snapshot.Source == HouseDataSource.Local ? "📡本地直报" : "☁网站数据";
+        CanToggleMode = phase.State == LotteryState.Available;
         var age = now - snapshot.EffectiveSeenAt;
         FreshnessText = age.TotalHours >= 1
             ? $"数据更新于 {(int)age.TotalHours} 小时前"

@@ -347,7 +347,7 @@ function renderWatch() {
     return `<div class="item">
       <div class="row"><span class="title">${w.serverName} ${w.areaName} ${w.slotNo}区 ${w.id}号 [${w.size}]</span>
         <span>
-          <button onclick="toggleMode('${watchKey(w)}')">${w.mode === 1 ? '已报名' : '计划抽'}</button>
+          ${w.state === 1 ? `<button onclick="toggleMode('${watchKey(w)}')" title="${w.mode === 1 ? '改回计划抽' : '已报名参与'}">${w.mode === 1 ? '已报名' : '计划抽'}</button>` : `<span class="badge">${w.mode === 1 ? '已报名' : '计划抽'}</span>`}
           <button onclick="unwatch('${watchKey(w)}')">✕</button>
         </span></div>
       <div>${state}${cd}${w.stale ? ' <span class="warn">⚠ 数据较旧</span>' : ''}</div>
