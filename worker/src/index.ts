@@ -76,10 +76,27 @@ interface WatchItem {
   fired: string[];
 }
 
+/** 我的房产（炸房提醒）：手动登记 + 进房打卡 */
+interface HomeEntry {
+  server: number; area: number; slot: number; id: number;
+  /** 备注（一般是角色名，多账号区分用） */
+  label: string;
+  /** 最后一次进房时间（unix 秒），0=未知 */
+  lastEnteredAt: number;
+  fired: string[];
+}
+
+/** 炸房规则：45 天未进房进入拆除准备 */
+const DEMOLITION_DAYS = 45;
+/** 炸房提醒提前量（天） */
+const DEMOLITION_LEAD_DAYS = [10, 5, 1];
+
 interface UserSub {
   chatId: number;
   leadHours: number[];
   items: WatchItem[];
+  /** 我的房产（炸房提醒） */
+  homes?: HomeEntry[];
   /** 可选：WxPusher 极简推送 SPT（微信渠道） */
   wxpusherSpt?: string;
   /** 可选：自定义昵称（网页顶部显示） */
@@ -243,6 +260,13 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /help — 本帮助
 
 提醒时机：报名截止前 / 开奖 / 公示期领房死线 / 下轮开抽
+
+炸房提醒（45 天未进房拆除）：
+/myhome 服务器 房区 区号 房号 [角色名] — 登记我的房产
+　例：/myhome 萌芽池 白银乡 14 43 阿光
+/entered [序号] — 我刚进过这套房，打卡刷新时间
+/homes — 我的房产与炸房倒计时
+
 数据来源：house.ffxiv.cyou（玩家上报，可能有延迟）`;
 
 function fmtTime(unixSec: number): string {
@@ -413,6 +437,104 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
       return;
     }
 
+    case '/myhome': {
+      // /myhome 服务器 房区 区号 房号 [角色名/备注]
+      let tokens = args.flatMap(a => {
+        const m = a.match(/^(\d+)区(\d+)号?$/);
+        return m ? [m[1], m[2]] : [a];
+      });
+      if (tokens.length < 4) {
+        await tgSend(env, chatId, '格式：/myhome 服务器 房区 区号 房号 [角色名]\n例：/myhome 萌芽池 白银乡 14 43 阿光');
+        return;
+      }
+      const server = findServer(tokens[0]);
+      const area = findArea(tokens[1]);
+      const slot = parseInt(tokens[2], 10);
+      const plotId = parseInt(tokens[3], 10);
+      const label = tokens.slice(4).join(' ');
+      if (!server || area < 0 || Number.isNaN(slot) || Number.isNaN(plotId)
+        || slot < 1 || slot > 30 || plotId < 1 || plotId > 60) {
+        await tgSend(env, chatId, '没看懂参数。服务器名见 /servers，房区：海雾村/薰衣草苗圃/高脚孤丘/白银乡/穹顶皓天，区号 1-30，房号 1-60。');
+        return;
+      }
+
+      const sub = await getSub(env, chatId);
+      sub.homes ??= [];
+      const existing = sub.homes.find(h => h.server === server.id && h.area === area && h.slot === slot - 1 && h.id === plotId);
+      if (existing) {
+        if (label) existing.label = label;
+        await saveSub(env, sub);
+        await tgSend(env, chatId, `这套房已登记过${label ? '，备注已更新' : ''}。`);
+        return;
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      sub.homes.push({
+        server: server.id, area, slot: slot - 1, id: plotId,
+        label: label || '我的房',
+        lastEnteredAt: nowSec, // 默认以登记时间为起点
+        fired: [],
+      });
+      await saveSub(env, sub);
+      await tgSend(env, chatId,
+        `🏠 已登记：${server.name} ${AREA_NAMES[area]} ${slot}区 ${plotId}号（${label || '我的房'}）\n` +
+        `已按现在起算 ${DEMOLITION_DAYS} 天倒计时。如果最近没进过房，进房后发 /entered 校准。\n` +
+        `提醒：45 天未进房会进入拆除准备，以游戏内规则为准。`);
+      return;
+    }
+
+    case '/entered': {
+      const sub = await getSub(env, chatId);
+      const homes = sub.homes ?? [];
+      if (homes.length === 0) {
+        await tgSend(env, chatId, '还没有登记房产，用 /myhome 登记。');
+        return;
+      }
+      let idx = 0;
+      if (args.length > 0) {
+        const n = parseInt(args[0], 10);
+        if (Number.isNaN(n) || n < 1 || n > homes.length) {
+          await tgSend(env, chatId, `格式：/entered [序号]（1-${homes.length}，序号见 /homes）`);
+          return;
+        }
+        idx = n - 1;
+      } else if (homes.length > 1) {
+        const list = homes.map((h, i) => `${i + 1}. ${h.label}`).join('\n');
+        await tgSend(env, chatId, `你有多套房产，请指定序号：/entered 序号\n${list}`);
+        return;
+      }
+      homes[idx].lastEnteredAt = Math.floor(Date.now() / 1000);
+      homes[idx].fired = [];
+      await saveSub(env, sub);
+      const h = homes[idx];
+      const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
+      await tgSend(env, chatId,
+        `✅ 已打卡：${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）\n` +
+        `炸房倒计时已重置为 ${DEMOLITION_DAYS} 天。`);
+      return;
+    }
+
+    case '/homes': {
+      const sub = await getSub(env, chatId);
+      const homes = sub.homes ?? [];
+      if (homes.length === 0) {
+        await tgSend(env, chatId, '还没有登记房产，用 /myhome 登记。');
+        return;
+      }
+      const nowSec = Math.floor(Date.now() / 1000);
+      const lines = homes.map((h, i) => {
+        const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
+        const pos = `${i + 1}. ${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
+        if (h.lastEnteredAt <= 0) return `${pos}\n　进房时间未知，进房后发 /entered ${i + 1}`;
+        const deadline = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
+        const remain = deadline - nowSec;
+        const days = Math.floor(remain / 86400);
+        const mark = days <= 5 ? '🔴' : days <= 10 ? '🟠' : '🟢';
+        return `${pos}\n　${mark} 剩余 ${days} 天（最后进房 ${fmtTime(h.lastEnteredAt)}）`;
+      });
+      await tgSend(env, chatId, lines.join('\n'));
+      return;
+    }
+
     default:
       await tgSend(env, chatId, '未知命令，发 /help 查看用法。');
   }
@@ -431,7 +553,8 @@ async function runReminders(env: Env): Promise<void> {
   const subs: UserSub[] = [];
   for (const key of subKeys.keys) {
     const sub = await env.KV.get<UserSub>(key.name, 'json');
-    if (sub && sub.items.length > 0) subs.push(sub);
+    // 有关注或有房产的用户才参与提醒
+    if (sub && (sub.items.length > 0 || (sub.homes?.length ?? 0) > 0)) subs.push(sub);
   }
   if (subs.length === 0) return;
 
@@ -450,6 +573,40 @@ async function runReminders(env: Env): Promise<void> {
   for (const sub of subs) {
     let dirty = false;
     const due: DueReminder[] = [];
+
+    // ── 炸房提醒（45 天未进房）──
+    for (const h of sub.homes ?? []) {
+      if (h.lastEnteredAt <= 0) continue;
+      const deadlineSec = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
+      const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
+      const pos = `${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
+
+      for (const days of DEMOLITION_LEAD_DAYS) {
+        const fireSec = deadlineSec - days * 86400;
+        if (nowSec < fireSec || nowSec >= deadlineSec) continue;
+        const key = `demo|${deadlineSec}|${days}`;
+        if (h.fired.includes(key)) continue;
+        h.fired.push(key);
+        if (h.fired.length > 20) h.fired.splice(0, h.fired.length - 20);
+        dirty = true;
+        due.push({
+          chatId: sub.chatId,
+          title: `🚨 炸房警告：还剩 ${days} 天`,
+          body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进房！${days <= 1 ? '今天必须进房，否则将进入拆除流程！' : '记得上线进一次房（进入室内才算）。'}\n进房后发 /entered 或到网页版打卡。`,
+        });
+      }
+
+      // 已过期（只提醒一次）
+      if (nowSec >= deadlineSec && !h.fired.includes(`demo|${deadlineSec}|over`)) {
+        h.fired.push(`demo|${deadlineSec}|over`);
+        dirty = true;
+        due.push({
+          chatId: sub.chatId,
+          title: '🚨 炸房倒计时已到',
+          body: `${pos}\n已超过 ${DEMOLITION_DAYS} 天未进房，可能已进入拆除流程！请立即上线进房抢救！`,
+        });
+      }
+    }
 
     for (const w of sub.items) {
       const house = salesByServer.get(w.server)
@@ -587,10 +744,19 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const chatId = await checkAuth(env, url);
     if (chatId == null) return json({ error: '未绑定或令牌无效，请通过 Bot /start 获取专属链接' }, 401);
     const sub = await getSub(env, chatId);
+    const nowSec = Math.floor(Date.now() / 1000);
     return json({
       leadHours: sub.leadHours,
       wxpusherSpt: sub.wxpusherSpt ?? '',
       nickname: sub.nickname ?? '',
+      homes: (sub.homes ?? []).map(h => ({
+        server: h.server, serverName: ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`,
+        area: h.area, areaName: AREA_NAMES[h.area], slot: h.slot, slotNo: h.slot + 1,
+        id: h.id, label: h.label,
+        lastEnteredAt: h.lastEnteredAt,
+        deadline: h.lastEnteredAt > 0 ? h.lastEnteredAt + DEMOLITION_DAYS * 86400 : 0,
+        remainDays: h.lastEnteredAt > 0 ? Math.floor((h.lastEnteredAt + DEMOLITION_DAYS * 86400 - nowSec) / 86400) : -1,
+      })),
       items: await enrichWatch(env, sub),
     });
   }
@@ -651,6 +817,60 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     sub.leadHours = [...new Set(hours)].sort((a, b) => b - a);
     await saveSub(env, sub);
     return json({ ok: true, leadHours: sub.leadHours });
+  }
+
+  if (path === '/api/home' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number; label?: string };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const { server, area, slot, id } = body;
+    if (typeof server !== 'number' || typeof area !== 'number' || typeof slot !== 'number' || typeof id !== 'number'
+      || !ALL_SERVERS.some(s => s.id === server) || area < 0 || area > 4 || slot < 0 || slot > 29 || id < 1 || id > 60) {
+      return json({ error: '参数无效' }, 400);
+    }
+    const sub = await getSub(env, chatId);
+    sub.homes ??= [];
+    const existing = sub.homes.find(h => h.server === server && h.area === area && h.slot === slot && h.id === id);
+    if (existing) {
+      if (body.label) existing.label = body.label.slice(0, 16);
+      await saveSub(env, sub);
+      return json({ ok: true, message: '已登记过，备注已更新' });
+    }
+    sub.homes.push({
+      server, area, slot, id,
+      label: (body.label ?? '').slice(0, 16) || '我的房',
+      lastEnteredAt: Math.floor(Date.now() / 1000),
+      fired: [],
+    });
+    await saveSub(env, sub);
+    return json({ ok: true });
+  }
+
+  if (path === '/api/home' && request.method === 'DELETE') {
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const sub = await getSub(env, chatId);
+    const before = (sub.homes ?? []).length;
+    sub.homes = (sub.homes ?? []).filter(h =>
+      !(h.server === body.server && h.area === body.area && h.slot === body.slot && h.id === body.id));
+    if (sub.homes.length === before) return json({ error: '未找到该房产' }, 404);
+    await saveSub(env, sub);
+    return json({ ok: true });
+  }
+
+  if (path === '/api/entered' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const sub = await getSub(env, chatId);
+    const home = (sub.homes ?? []).find(h =>
+      h.server === body.server && h.area === body.area && h.slot === body.slot && h.id === body.id);
+    if (!home) return json({ error: '未找到该房产' }, 404);
+    home.lastEnteredAt = Math.floor(Date.now() / 1000);
+    home.fired = [];
+    await saveSub(env, sub);
+    return json({ ok: true });
   }
 
   if (path === '/api/wxpusher' && request.method === 'POST') {

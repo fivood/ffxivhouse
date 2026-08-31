@@ -138,6 +138,31 @@
   <div class="panel" id="watchList"><div class="empty">加载中…</div></div>
 </div>
 
+<!-- 我的房产（炸房提醒） -->
+<div id="homeSection" style="display:none">
+  <div class="strip"><span>⊙ 我的房产 <span class="meta" style="font-weight:normal">45 天未进房会拆除</span></span></div>
+  <div class="panel">
+    <div id="homeList"><div class="empty">暂无登记</div></div>
+    <div class="bind-box" style="border-top:1px solid #E3E3DA">
+      <span class="meta">登记我的房（多账号可登记多套，角色名做备注）：</span>
+      <div class="row" style="flex-wrap:wrap">
+        <select id="homeServer" style="flex:1;min-width:90px"></select>
+        <select id="homeArea">
+          <option value="0">海雾村</option><option value="1">薰衣草苗圃</option>
+          <option value="2">高脚孤丘</option><option value="3">白银乡</option><option value="4">穹顶皓天</option>
+        </select>
+        <input type="text" id="homeSlot" placeholder="区号" style="width:52px">
+        <input type="text" id="homePlot" placeholder="房号" style="width:52px">
+        <input type="text" id="homeLabel" placeholder="角色名" style="width:80px">
+        <button onclick="addHome()" title="登记房产">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          登记
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 推送设置（跟随关注区显示，但不吸顶） -->
 <div id="watchSection" style="display:none">
   <div class="strip">⊙ 推送设置</div>
@@ -237,13 +262,16 @@ function toast(msg) {
 }
 
 // ── 数据 ──
+let myHomes = [];
 async function loadServers() {
   const dcs = await (await fetch('/api/servers')).json();
-  $('selServer').innerHTML = dcs.map(dc =>
+  const opts = dcs.map(dc =>
     `<optgroup label="${dc.name}">` +
     dc.servers.map(s => `<option value="${s.id}">${s.name}</option>`).join('') +
     `</optgroup>`).join('');
+  $('selServer').innerHTML = opts;
   $('selServer').value = '1060';
+  $('homeServer').innerHTML = opts;
 }
 
 async function loadSales(manual) {
@@ -260,17 +288,20 @@ async function loadSales(manual) {
 }
 
 async function loadWatch() {
-  if (!authed()) { $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; $('watchSticky').style.display = 'none'; return; }
+  if (!authed()) { $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; $('watchSticky').style.display = 'none'; $('homeSection').style.display = 'none'; return; }
   try {
     const resp = await fetch(`/api/watch?${qs()}`);
     if (resp.status === 401) {
-      $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; $('watchSticky').style.display = 'none';
+      $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; $('watchSticky').style.display = 'none'; $('homeSection').style.display = 'none';
       return;
     }
     const data = await resp.json();
     myWatches = data.items || [];
+    myHomes = data.homes || [];
     leadHours = data.leadHours || [24, 1];
     renderChips();
+    renderHomes();
+    $('homeSection').style.display = 'block';
     $('wxUidInput').value = data.wxpusherSpt || '';
     $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
     $('wxMiniStatus').textContent = data.wxpusherSpt ? ' ✅已开启' : '';
@@ -359,6 +390,73 @@ function renderSales() {
         ${h.stale ? ' <span class="warn">⚠ 数据较旧</span>' : ''}</div>
     </div>`;
   }).join('') : '<div class="empty">没有符合条件的在售房屋</div>';
+}
+
+// ── 我的房产（炸房提醒） ──
+function homeKey(h) { return `${h.server}:${h.area}:${h.slot}:${h.id}`; }
+
+function renderHomes() {
+  const el = $('homeList');
+  if (!myHomes.length) { el.innerHTML = '<div class="empty">暂无登记，在下方添加</div>'; return; }
+  const sorted = [...myHomes].sort((a, b) => a.remainDays - b.remainDays);
+  el.innerHTML = sorted.map(h => {
+    const key = homeKey(h);
+    let status;
+    if (h.lastEnteredAt <= 0) {
+      status = '<span class="est">进房时间未知，进房后打卡</span>';
+    } else {
+      const d = h.remainDays;
+      const color = d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : d <= 10 ? '#A66A00' : '#4C7A34';
+      const mark = d <= 1 ? '🔴' : d <= 5 ? '🟠' : '🟢';
+      status = `<span style="color:${color};font-weight:bold">${mark} 剩余 ${d} 天</span>` +
+        ` <span class="meta">最后进房 ${fmtDate(h.lastEnteredAt)}</span>`;
+    }
+    return `<div class="item">
+      <div class="row"><span class="title">${h.serverName} ${h.areaName} ${h.slotNo}区 ${h.id}号 <span class="meta">${h.label}</span></span>
+        <span>
+          <button class="icon-btn" title="刚进过房，打卡重置倒计时" onclick="enteredHome('${key}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            <span style="margin-left:3px">已进房</span>
+          </button>
+          <button class="icon-btn" title="移除" onclick="removeHome('${key}')">✕</button>
+        </span></div>
+      <div>${status}</div>
+    </div>`;
+  }).join('');
+}
+
+function fmtDate(unixSec) {
+  const d = new Date(unixSec * 1000);
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function addHome() {
+  if (!authed()) return toast('请先绑定 Telegram');
+  const slot = parseInt($('homeSlot').value), id = parseInt($('homePlot').value);
+  if (isNaN(slot) || isNaN(id) || slot < 1 || slot > 30 || id < 1 || id > 60)
+    return toast('区号 1-30，房号 1-60');
+  const resp = await api('POST', '/api/home', {
+    server: +$('homeServer').value, area: +$('homeArea').value,
+    slot: slot - 1, id, label: $('homeLabel').value.trim(),
+  });
+  const data = await resp.json();
+  if (resp.ok) {
+    toast('已登记，倒计时已开始');
+    $('homeSlot').value = ''; $('homePlot').value = ''; $('homeLabel').value = '';
+    await loadWatch();
+  } else toast(data.error || '登记失败');
+}
+
+async function removeHome(key) {
+  await api('DELETE', '/api/home', parseKey(key));
+  toast('已移除');
+  await loadWatch();
+}
+
+async function enteredHome(key) {
+  await api('POST', '/api/entered', parseKey(key));
+  toast('已打卡，倒计时重置为 45 天');
+  await loadWatch();
 }
 
 // ── 操作 ──
