@@ -179,6 +179,36 @@ async function tgSend(env: Env, chatId: number, text: string): Promise<void> {
   if (!resp.ok) console.error(`tgSend 失败 ${resp.status}: ${await resp.text()}`);
 }
 
+/** 带内联按钮的消息（用于炸房提醒的一键打卡） */
+async function tgSendWithButton(env: Env, chatId: number, text: string, buttonText: string, callbackData: string): Promise<void> {
+  if (!env.TG_BOT_TOKEN) {
+    console.log(`[no-token] -> ${chatId}: ${text} [按钮:${buttonText} data:${callbackData}]`);
+    return;
+  }
+  const resp = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      reply_markup: {
+        inline_keyboard: [[{ text: buttonText, callback_data: callbackData }]],
+      },
+    }),
+  });
+  if (!resp.ok) console.error(`tgSendWithButton 失败 ${resp.status}: ${await resp.text()}`);
+}
+
+/** 应答回调查询（消除按钮的加载圈） */
+async function tgAnswerCallback(env: Env, callbackId: string, text: string): Promise<void> {
+  if (!env.TG_BOT_TOKEN) return;
+  await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/answerCallbackQuery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ callback_query_id: callbackId, text }),
+  });
+}
+
 /** WxPusher 极简推送（SPT，用户自助扫码获取，微信渠道） */
 async function wxSend(env: Env, spt: string, title: string, body: string): Promise<void> {
   const resp = await fetch('https://wxpusher.zjiecode.com/api/send/message/simple-push', {
@@ -283,6 +313,30 @@ function fmtRemain(nowSec: number, targetSec: number): string {
   if (d >= 1) return `剩余 ${d} 天 ${h} 小时`;
   if (h >= 1) return `剩余 ${h} 小时 ${m} 分`;
   return `剩余 ${m} 分`;
+}
+
+/** 处理内联按钮回调（entered:server:area:slot:id → 炸房打卡） */
+async function handleCallback(env: Env, chatId: number, callbackId: string, data: string): Promise<void> {
+  const parts = data.split(':');
+  if (parts[0] === 'entered' && parts.length === 5) {
+    const server = parseInt(parts[1], 10);
+    const area = parseInt(parts[2], 10);
+    const slot = parseInt(parts[3], 10);
+    const id = parseInt(parts[4], 10);
+    const sub = await getSub(env, chatId);
+    const home = (sub.homes ?? []).find(h =>
+      h.server === server && h.area === area && h.slot === slot && h.id === id);
+    if (!home) {
+      await tgAnswerCallback(env, callbackId, '未找到该房产（可能已移除）');
+      return;
+    }
+    home.lastEnteredAt = Math.floor(Date.now() / 1000);
+    home.fired = [];
+    await saveSub(env, sub);
+    await tgAnswerCallback(env, callbackId, `✅ 已打卡！${home.label} 倒计时重置为 ${DEMOLITION_DAYS} 天`);
+    return;
+  }
+  await tgAnswerCallback(env, callbackId, '未知操作');
 }
 
 async function handleCommand(env: Env, chatId: number, text: string): Promise<void> {
@@ -542,7 +596,11 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
 
 // ═══════════════ 提醒引擎 ═══════════════
 
-interface DueReminder { chatId: number; title: string; body: string }
+interface DueReminder {
+  chatId: number; title: string; body: string;
+  /** 可选：一键打卡按钮对应的房产 */
+  homeRef?: { server: number; area: number; slot: number; id: number };
+}
 
 async function runReminders(env: Env): Promise<void> {
   const nowSec = Math.floor(Date.now() / 1000);
@@ -592,7 +650,8 @@ async function runReminders(env: Env): Promise<void> {
         due.push({
           chatId: sub.chatId,
           title: `🚨 炸房警告：还剩 ${days} 天`,
-          body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进房！${days <= 1 ? '今天必须进房，否则将进入拆除流程！' : '记得上线进一次房（进入室内才算）。'}\n进房后发 /entered 或到网页版打卡。`,
+          body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进房！${days <= 1 ? '今天必须进房，否则将进入拆除流程！' : '记得上线进一次房（进入室内才算）。'}\n进房后点下方按钮或发 /entered 打卡。`,
+          homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
         });
       }
 
@@ -604,6 +663,7 @@ async function runReminders(env: Env): Promise<void> {
           chatId: sub.chatId,
           title: '🚨 炸房倒计时已到',
           body: `${pos}\n已超过 ${DEMOLITION_DAYS} 天未进房，可能已进入拆除流程！请立即上线进房抢救！`,
+          homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
         });
       }
     }
@@ -656,7 +716,13 @@ async function runReminders(env: Env): Promise<void> {
     }
 
     for (const r of due) {
-      await tgSend(env, r.chatId, `${r.title}\n\n${r.body}`);
+      if (r.homeRef) {
+        const ref = r.homeRef;
+        await tgSendWithButton(env, r.chatId, `${r.title}\n\n${r.body}`,
+          '✅ 已进房（重置倒计时）', `entered:${ref.server}:${ref.area}:${ref.slot}:${ref.id}`);
+      } else {
+        await tgSend(env, r.chatId, `${r.title}\n\n${r.body}`);
+      }
       if (sub.wxpusherSpt) await wxSend(env, sub.wxpusherSpt, r.title, r.body);
     }
     if (dirty) await saveSub(env, sub);
@@ -892,6 +958,11 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
 interface TgUpdate {
   message?: { chat: { id: number }; text?: string };
+  callback_query?: {
+    id: string;
+    data?: string;
+    message?: { chat: { id: number } };
+  };
 }
 
 export default {
@@ -910,6 +981,14 @@ export default {
         return new Response('forbidden', { status: 403 });
       }
       const update = (await request.json()) as TgUpdate;
+
+      // 内联按钮回调（炸房提醒一键打卡）
+      if (update.callback_query?.data && update.callback_query.message) {
+        const cb = update.callback_query;
+        ctx.waitUntil(handleCallback(env, cb.message!.chat.id, cb.id, cb.data!));
+        return new Response('ok', { status: 200 });
+      }
+
       const chatId = update.message?.chat.id;
       const text = update.message?.text;
       if (chatId && text) {
