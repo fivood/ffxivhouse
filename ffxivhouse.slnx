@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FF14HouseReminder.App/FF14HouseReminder.App.csproj" />
+  </Folder>
+</Solution>

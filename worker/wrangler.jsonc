@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ff14house-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-31",
+  "observability": {
+    "enabled": true
+  },
+  // 自定义域名（域名需在同一个 Cloudflare 账号下）
+  "routes": [
+    { "pattern": "ff14.70015.net", "custom_domain": true }
+  ],
+  // 静态页面（Web 版）
+  "assets": {
+    "directory": "./public"
+  },
+  // KV 命名空间首次 deploy 时自动创建
+  "kv_namespaces": [
+    { "binding": "KV" }
+  ],
+  // 每 2 分钟跑一次提醒检查（API 数据本身有 5 分钟缓存，不会重复拉）
+  "triggers": {
+    "crons": ["*/2 * * * *"]
+  }
+}
+

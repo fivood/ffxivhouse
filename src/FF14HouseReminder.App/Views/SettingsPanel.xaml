@@ -1,0 +1,102 @@
+<UserControl x:Class="FF14HouseReminder.Views.SettingsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="382" Background="#D8D8CF"
+             FontFamily="Tahoma, Microsoft YaHei UI" FontSize="12">
+    <UserControl.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="0,2,0,6"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="BorderBrush" Value="#ABABA0"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Margin" Value="0,3"/>
+        </Style>
+        <Style TargetType="TextBlock" x:Key="H">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="#55554A"/>
+            <Setter Property="Margin" Value="0,12,0,4"/>
+        </Style>
+        <Style TargetType="Button" x:Key="Btn">
+            <Setter Property="Background" Value="#F2F2EB"/>
+            <Setter Property="Foreground" Value="#3F3F38"/>
+            <Setter Property="BorderBrush" Value="#ABABA0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,3"/>
+            <Setter Property="Margin" Value="4,2"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Border BorderBrush="#ABABA0" BorderThickness="1,0,0,0">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="12">
+
+                <TextBlock Text="⊙  设置" FontWeight="Bold" FontSize="15" Foreground="#55554A"/>
+
+                <TextBlock Text="── 提醒规则" Style="{StaticResource H}"/>
+                <TextBlock Text="截止前提醒提前量（小时，逗号分隔，如 24,1）" TextWrapping="Wrap"/>
+                <TextBox Text="{Binding LeadHoursText}"/>
+                <CheckBox Content="申请期截止前提醒（快去报名）" IsChecked="{Binding NotifyEntryDeadline}"/>
+                <CheckBox Content="开奖提醒（进入公示期，仅已报名）" IsChecked="{Binding NotifyResultsStart}"/>
+                <CheckBox Content="公示期截止前提醒（领房/领回押金死线）" IsChecked="{Binding NotifyClaimDeadline}"/>
+                <CheckBox Content="下轮申请期开始提醒" IsChecked="{Binding NotifyNextEntryStart}"/>
+
+                <TextBlock Text="── 常规" Style="{StaticResource H}"/>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="数据轮询间隔（分钟，≥5）：" VerticalAlignment="Center"/>
+                    <TextBox Width="50" Text="{Binding PollIntervalMinutes}" Margin="4,2"/>
+                </StackPanel>
+                <CheckBox Content="开机自动启动" IsChecked="{Binding AutoStart}"/>
+                <CheckBox Content="启动时检查新版本" IsChecked="{Binding CheckUpdates}"/>
+
+                <TextBlock Text="── 推送渠道" Style="{StaticResource H}"/>
+                <CheckBox Content="Windows 通知（Toast）" IsChecked="{Binding UseToast}"/>
+
+                <CheckBox Content="Telegram 推送" IsChecked="{Binding TelegramEnabled}"/>
+                <TextBlock Text="Bot Token：" ToolTip="创建方法：&#x0a;1. Telegram 搜索 @BotFather，发送 /newbot&#x0a;2. 按提示输入名称和用户名（以 bot 结尾）&#x0a;3. 把得到的 Token 填到这里"/>
+                <TextBox Text="{Binding TelegramBotToken}" ToolTip="创建方法：&#x0a;1. Telegram 搜索 @BotFather，发送 /newbot&#x0a;2. 按提示输入名称和用户名（以 bot 结尾）&#x0a;3. 把得到的 Token 填到这里"/>
+                <TextBlock Text="Chat ID：" ToolTip="获取方法：&#x0a;1. 先在 Telegram 里给你的 Bot 私聊发一条消息（必须）&#x0a;2. 点右边「获取」按钮，从列表里选你自己&#x0a;（也可以给 @userinfobot 发消息查询）"/>
+                <DockPanel>
+                    <Button Content="获取" Style="{StaticResource Btn}" DockPanel.Dock="Right"
+                            Click="FetchChatId_Click"
+                            ToolTip="通过 Bot 的消息记录自动获取 Chat ID&#x0a;（需先给 Bot 发过消息）"/>
+                    <TextBox Text="{Binding TelegramChatId}" ToolTip="获取方法：&#x0a;1. 先在 Telegram 里给你的 Bot 私聊发一条消息（必须）&#x0a;2. 点右边「获取」按钮，从列表里选你自己&#x0a;（也可以给 @userinfobot 发消息查询）"/>
+                </DockPanel>
+
+                <CheckBox Content="WxPusher 推送（微信）" IsChecked="{Binding WxPusherEnabled}"/>
+                <TextBlock Text="AppToken：" ToolTip="获取方法：&#x0a;1. 浏览器打开 wxpusher.zjiecode.com，微信扫码登录&#x0a;2. 应用管理 → 创建应用&#x0a;3. 复制 appToken（AT_ 开头）填到这里"/>
+                <TextBox Text="{Binding WxPusherAppToken}" ToolTip="获取方法：&#x0a;1. 浏览器打开 wxpusher.zjiecode.com，微信扫码登录&#x0a;2. 应用管理 → 创建应用&#x0a;3. 复制 appToken（AT_ 开头）填到这里"/>
+                <TextBlock Text="UID：" ToolTip="获取方法：&#x0a;1. 在应用详情页用微信扫码订阅&#x0a;2. 用户管理里找到自己的 UID（UID_ 开头）填到这里"/>
+                <TextBox Text="{Binding WxPusherUid}" ToolTip="获取方法：&#x0a;1. 在应用详情页用微信扫码订阅&#x0a;2. 用户管理里找到自己的 UID（UID_ 开头）填到这里"/>
+
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="发送测试推送" Style="{StaticResource Btn}" Click="TestPush_Click"/>
+                    <TextBlock Text="{Binding PushTestResult}" VerticalAlignment="Center"
+                               Foreground="#4C7A34" TextWrapping="Wrap"/>
+                </StackPanel>
+
+                <!-- 本地直报（仅自用版显示） -->
+                <StackPanel x:Name="IngestSection">
+                    <TextBlock Text="── 本地直报（可选增强）" Style="{StaticResource H}"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="#8A8A80"
+                               Text="安装配套游戏插件后，逛房区/点门牌可将本服房屋数据直接推送到本工具（不经过网站）。将插件设置中的地址和令牌填为下方内容。"/>
+                    <CheckBox Content="启用本地直报接收" IsChecked="{Binding LocalIngestEnabled}"/>
+                    <TextBlock Text="{Binding IngestAddress, StringFormat='接收地址：{0}'}" TextWrapping="Wrap"/>
+                    <TextBlock Text="令牌："/>
+                    <DockPanel>
+                        <Button Content="复制" Style="{StaticResource Btn}" DockPanel.Dock="Right"
+                                Click="CopyToken_Click"/>
+                        <TextBox Text="{Binding LocalIngestToken}" IsReadOnly="True"/>
+                    </DockPanel>
+                </StackPanel>
+
+                <TextBlock Text="── 关于" Style="{StaticResource H}"/>
+                <TextBlock TextWrapping="Wrap" Foreground="#8A8A80"
+                           Text="数据来源：艾欧泽亚售楼中心 house.ffxiv.cyou（玩家上报数据，可能存在延迟）。本工具与 Square Enix、盛趣游戏无关。"/>
+
+                <Button Content="保存并关闭" Style="{StaticResource Btn}" Background="#8B8B5E" Foreground="White"
+                        HorizontalAlignment="Right" Margin="0,12,0,4" Click="Save_Click"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</UserControl>

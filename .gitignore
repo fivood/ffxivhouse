@@ -1,0 +1,20 @@
+## .NET 通用
+bin/
+obj/
+out/
+*.user
+*.suo
+.vs/
+
+## 发布产物
+publish/
+*.zip
+
+## 临时文件
+*.log
+
+## Node / Workers
+node_modules/
+.wrangler/
+.dev.vars
+worker/worker-configuration.d.ts

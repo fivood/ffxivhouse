@@ -1,0 +1,319 @@
+<Window x:Class="FF14HouseReminder.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:FF14HouseReminder.ViewModels"
+        xmlns:local="clr-namespace:FF14HouseReminder"
+        xmlns:views="clr-namespace:FF14HouseReminder.Views"
+        Title="FF14 抽房提醒" Width="400" Height="780" MinWidth="360" MinHeight="500"
+        WindowStartupLocation="CenterScreen"
+        Topmost="{Binding AlwaysOnTop}"
+        Background="#D8D8CF" Foreground="#3F3F38" FontSize="12"
+        FontFamily="Tahoma, Microsoft YaHei UI">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="WindowBg" Color="#D8D8CF"/>
+        <SolidColorBrush x:Key="StripBg" Color="#EBEBE4"/>
+        <SolidColorBrush x:Key="ContentBg" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BorderGray" Color="#ABABA0"/>
+        <SolidColorBrush x:Key="TextDark" Color="#3F3F38"/>
+        <SolidColorBrush x:Key="TextDim" Color="#8A8A80"/>
+        <SolidColorBrush x:Key="Olive" Color="#8B8B5E"/>
+        <local:InverseBoolConverter x:Key="InverseBool"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- 复古方形按钮 -->
+        <Style TargetType="Button" x:Key="RetroBtn">
+            <Setter Property="Background" Value="#F2F2EB"/>
+            <Setter Property="Foreground" Value="#3F3F38"/>
+            <Setter Property="BorderBrush" Value="#ABABA0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="9,2"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#ABABA0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 面板标题条 -->
+        <Style TargetType="Border" x:Key="Strip">
+            <Setter Property="Background" Value="#EBEBE4"/>
+            <Setter Property="BorderBrush" Value="#ABABA0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="6,3"/>
+        </Style>
+
+        <!-- 内容白板 -->
+        <Style TargetType="ListBox" x:Key="WhiteList">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#ABABA0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+
+        <!-- 区域拖拽分隔条 -->
+        <Style TargetType="GridSplitter">
+            <Setter Property="Height" Value="6"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Background" Value="#EBEBE4"/>
+            <Setter Property="Cursor" Value="SizeNS"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="#ABABA0" BorderThickness="0,1">
+                            <TextBlock Text="═" Foreground="#ABABA0" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" FontSize="8"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ══ 主内容 ══ -->
+        <Grid Grid.Column="0" Margin="8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>            <!-- 标题栏 -->
+                <RowDefinition Height="Auto"/>            <!-- 关注区标题 -->
+                <RowDefinition Height="2*" MinHeight="120"/> <!-- 关注列表（可拖） -->
+                <RowDefinition Height="Auto"/>            <!-- 拖拽分隔条 -->
+                <RowDefinition Height="3*" MinHeight="240"/> <!-- 浏览区（筛选+在售列表） -->
+                <RowDefinition Height="Auto"/>            <!-- 状态栏 -->
+            </Grid.RowDefinitions>
+
+            <!-- 标题栏 -->
+            <DockPanel Grid.Row="0" Margin="0,0,0,6">
+                <TextBlock DockPanel.Dock="Left" VerticalAlignment="Bottom">
+                    <Run Text="FF14" FontSize="20" FontWeight="Bold" Foreground="#55554A"/>
+                    <Run Text=" 抽房提醒" FontSize="13" FontWeight="Bold" Foreground="#8B8B5E"/>
+                </TextBlock>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                    <Button Content="{Binding UpdateText}" Style="{StaticResource RetroBtn}"
+                            Background="#F6E8C8" BorderBrush="#B06030" FontWeight="Bold"
+                            Visibility="{Binding HasUpdate, Converter={StaticResource BoolToVis}}"
+                            Command="{Binding OpenUpdateCommand}"/>
+                    <Button Content="↻ 刷新" Style="{StaticResource RetroBtn}" Command="{Binding RefreshCommand}"/>
+                    <Button Content="售楼中心" Style="{StaticResource RetroBtn}" Command="{Binding OpenWebsiteCommand}"/>
+                    <Button Content="置顶" Command="{Binding ToggleTopCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource RetroBtn}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding AlwaysOnTop}" Value="True">
+                                        <Setter Property="Background" Value="#8B8B5E"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="⚙ 设置" Command="{Binding ToggleSettingsCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource RetroBtn}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowSettings}" Value="True">
+                                        <Setter Property="Background" Value="#8B8B5E"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- 关注区 -->
+            <Border Grid.Row="1" Style="{StaticResource Strip}">
+                <TextBlock Text="⊙  我的关注" FontWeight="Bold" Foreground="#55554A"/>
+            </Border>
+            <ListBox Grid.Row="2" ItemsSource="{Binding WatchList}" Style="{StaticResource WhiteList}"
+                     BorderThickness="1,0,1,1" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate DataType="vm:WatchViewModel">
+                        <Grid Margin="2,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock FontWeight="Bold" FontSize="13">
+                                    <Run Text="{Binding DisplayName, Mode=OneWay}"/>
+                                    <Run Text="{Binding SizeName, Mode=OneWay}" Foreground="#8B8B5E"/>
+                                    <Run Text="{Binding ModeText, Mode=OneWay}" Foreground="#4C7A34"/>
+                                </TextBlock>
+                                <TextBlock Margin="0,3,0,0">
+                                    <Run Text="{Binding StateText, Mode=OneWay}"
+                                         Foreground="{Binding StateColor}" FontWeight="Bold"/>
+                                    <Run Text="  "/>
+                                    <Run Text="{Binding CountdownText, Mode=OneWay}"
+                                         Foreground="{Binding CountdownColor}"/>
+                                </TextBlock>
+                                <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" Margin="0,2,0,0">
+                                    <Run Text="{Binding SourceText, Mode=OneWay}"/>
+                                    <Run Text="  "/>
+                                    <Run Text="{Binding FreshnessText, Mode=OneWay}"/>
+                                </TextBlock>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
+                                <Button Content="{Binding ToggleModeText}" Style="{StaticResource RetroBtn}"
+                                        Margin="0,0,0,3"
+                                        Command="{Binding DataContext.ToggleWatchModeCommand,
+                                            RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                        CommandParameter="{Binding}"/>
+                                <Button Content="✕ 移除" Style="{StaticResource RetroBtn}"
+                                        Command="{Binding DataContext.RemoveWatchCommand,
+                                            RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                        CommandParameter="{Binding}"/>
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="4"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="BorderBrush" Value="#E3E3DA"/>
+                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
+
+            <!-- 拖拽分隔条 -->
+            <GridSplitter Grid.Row="3" ResizeBehavior="PreviousAndNext"/>
+
+            <!-- 浏览区 -->
+            <Grid Grid.Row="4">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Style="{StaticResource Strip}">
+                    <DockPanel>
+                        <TextBlock Text="⊙  在售房屋" FontWeight="Bold" Foreground="#55554A"
+                                   DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                        <ComboBox Width="118" Margin="1" HorizontalAlignment="Right" DockPanel.Dock="Right"
+                                  SelectedIndex="{Binding SortIndex}" ToolTip="排序方式">
+                            <ComboBoxItem Content="默认(房区/房号)"/>
+                            <ComboBoxItem Content="价格从低到高"/>
+                            <ComboBoxItem Content="价格从高到低"/>
+                            <ComboBoxItem Content="截止时间最近"/>
+                            <ComboBoxItem Content="尺寸 L→S"/>
+                            <ComboBoxItem Content="参与人数最少"/>
+                            <ComboBoxItem Content="数据最新"/>
+                        </ComboBox>
+                    </DockPanel>
+                </Border>
+                <WrapPanel Grid.Row="1" Background="#EBEBE4">
+                    <ComboBox Width="104" Margin="1" ItemsSource="{Binding Servers}" SelectedItem="{Binding SelectedServer}"
+                              DisplayMemberPath="Name"/>
+                    <ComboBox Width="98" Margin="1" SelectedIndex="{Binding AreaFilterIndex}">
+                        <ComboBoxItem Content="全部房区"/>
+                        <ComboBoxItem Content="海雾村"/>
+                        <ComboBoxItem Content="薰衣草苗圃"/>
+                        <ComboBoxItem Content="高脚孤丘"/>
+                        <ComboBoxItem Content="白银乡"/>
+                        <ComboBoxItem Content="穹顶皓天"/>
+                    </ComboBox>
+                    <ComboBox Width="62" Margin="1" SelectedIndex="{Binding SizeFilterIndex}">
+                        <ComboBoxItem Content="全尺寸"/>
+                        <ComboBoxItem Content="S"/>
+                        <ComboBoxItem Content="M"/>
+                        <ComboBoxItem Content="L"/>
+                    </ComboBox>
+                    <ComboBox Width="62" Margin="1" SelectedIndex="{Binding RegionFilterIndex}">
+                        <ComboBoxItem Content="全部"/>
+                        <ComboBoxItem Content="部队"/>
+                        <ComboBoxItem Content="个人"/>
+                    </ComboBox>
+                </WrapPanel>
+
+                <ListBox Grid.Row="2" ItemsSource="{Binding SalesList}" Style="{StaticResource WhiteList}"
+                         BorderThickness="1,0,1,1" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="vm:HouseItemViewModel">
+                            <Grid Margin="2,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock FontWeight="Bold" FontSize="13">
+                                        <Run Text="{Binding PositionText, Mode=OneWay}"/>
+                                        <Run Text="{Binding Badges, Mode=OneWay}" Foreground="{StaticResource TextDim}"
+                                             FontSize="11"/>
+                                    </TextBlock>
+                                    <TextBlock Margin="0,3,0,0">
+                                        <Run Text="{Binding PriceText, Mode=OneWay}" Foreground="#A66A00"/>
+                                    </TextBlock>
+                                    <TextBlock Margin="0,2,0,0">
+                                        <Run Text="{Binding StateText, Mode=OneWay}"
+                                             Foreground="{Binding StateColor}" FontWeight="Bold"/>
+                                        <Run Text="  "/>
+                                        <Run Text="{Binding CountdownText, Mode=OneWay}"
+                                             Foreground="{Binding CountdownColor}"/>
+                                    </TextBlock>
+                                </StackPanel>
+                                <Button Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0"
+                                        Content="{Binding WatchButtonText}" Style="{StaticResource RetroBtn}"
+                                        IsEnabled="{Binding IsWatched, Converter={StaticResource InverseBool}}"
+                                        Command="{Binding DataContext.AddWatchCommand,
+                                            RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="4"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="BorderBrush" Value="#E3E3DA"/>
+                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Grid>
+
+            <!-- 状态栏 -->
+            <Border Grid.Row="5" Margin="0,4,0,0" Background="#EBEBE4" BorderBrush="#ABABA0"
+                    BorderThickness="1" Padding="6,2">
+                <WrapPanel>
+                    <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" Text="{Binding StatusText}"/>
+                    <TextBlock FontSize="11" Foreground="{StaticResource TextDim}"
+                               Visibility="{Binding ShowIngestStatus, Converter={StaticResource BoolToVis}}">
+                        <Run Text="　│　直报: "/><Run Text="{Binding IngestStatusText, Mode=OneWay}"/>
+                    </TextBlock>
+                    <TextBlock FontSize="11" Foreground="{StaticResource TextDim}"
+                               Text="　│　数据来源: house.ffxiv.cyou"
+                               ToolTip="艾欧泽亚售楼中心（玩家上报数据）"/>
+                </WrapPanel>
+            </Border>
+        </Grid>
+
+        <!-- ══ 右侧设置面板（展开式） ══ -->
+        <views:SettingsPanel x:Name="SettingsPanelControl" Grid.Column="1" Visibility="Collapsed"/>
+    </Grid>
+</Window>

@@ -1,0 +1,633 @@
+/**
+ * FF14 抽房提醒 Bot（Cloudflare Workers 版）
+ *
+ * - Telegram Webhook 收命令：/watch /list /mode /unwatch /lead /servers /help
+ * - Cron 每 2 分钟检查一次订阅，到点通过 Bot 私聊推送
+ * - 房屋数据来自售楼中心 API，KV 缓存 5 分钟（遵守其轮询礼仪）
+ */
+
+// ═══════════════ 游戏静态数据 ═══════════════
+
+interface ServerInfo { id: number; name: string }
+
+const DATA_CENTERS: { name: string; servers: ServerInfo[] }[] = [
+  {
+    name: '陆行鸟', servers: [
+      { id: 1167, name: '红玉海' }, { id: 1081, name: '神意之地' }, { id: 1042, name: '拉诺西亚' }, { id: 1044, name: '幻影群岛' },
+      { id: 1060, name: '萌芽池' }, { id: 1173, name: '宇宙和音' }, { id: 1174, name: '沃仙曦染' }, { id: 1175, name: '晨曦王座' },
+    ],
+  },
+  {
+    name: '莫古力', servers: [
+      { id: 1172, name: '白银乡' }, { id: 1076, name: '白金幻象' }, { id: 1171, name: '神拳痕' }, { id: 1170, name: '潮风亭' },
+      { id: 1113, name: '旅人栈桥' }, { id: 1121, name: '拂晓之间' }, { id: 1166, name: '龙巢神殿' }, { id: 1176, name: '梦羽宝境' },
+    ],
+  },
+  {
+    name: '猫小胖', servers: [
+      { id: 1043, name: '紫水栈桥' }, { id: 1169, name: '延夏' }, { id: 1106, name: '静语庄园' }, { id: 1045, name: '摩杜纳' },
+      { id: 1177, name: '海猫茶屋' }, { id: 1178, name: '柔风海湾' }, { id: 1179, name: '琥珀原' },
+    ],
+  },
+  {
+    name: '豆豆柴', servers: [
+      { id: 1192, name: '水晶塔' }, { id: 1183, name: '银泪湖' }, { id: 1180, name: '太阳海岸' }, { id: 1186, name: '伊修加德' },
+      { id: 1201, name: '红茶川' },
+    ],
+  },
+];
+
+const ALL_SERVERS: ServerInfo[] = DATA_CENTERS.flatMap(dc => dc.servers);
+const AREA_NAMES = ['海雾村', '薰衣草苗圃', '高脚孤丘', '白银乡', '穹顶皓天'];
+const AREA_ALIASES = ['海雾', '薰衣', '高脚', '白银', '穹顶'];
+
+/** 尺寸表 [area][(plot-1)%30]，0=S 1=M 2=L */
+const SIZE_TABLE: number[][] = [
+  [1, 2, 0, 1, 2, 1, 1, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
+  [1, 0, 2, 0, 1, 2, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 2, 0, 1],
+  [0, 0, 0, 1, 2, 1, 0, 1, 0, 0, 1, 1, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 2],
+  [1, 0, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 1, 0, 1, 2, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 2],
+  [0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 2, 0, 0, 0, 1, 1, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 2],
+];
+
+function sizeOf(area: number, plotId: number): number {
+  if (area < 0 || area >= SIZE_TABLE.length || plotId < 1) return -1;
+  return SIZE_TABLE[area][(plotId - 1) % 30];
+}
+const SIZE_NAMES = ['S', 'M', 'L'];
+const STATE_NAMES = ['状态未知', '申请期（可报名）', '公示期（看结果）', '准备期（等下轮）'];
+
+// ═══════════════ 数据模型 ═══════════════
+
+interface HouseEntry {
+  Server: number; Area: number; Slot: number; ID: number;
+  Price: number; Size: number;
+  FirstSeen: number; LastSeen: number;
+  State: number; Participate: number; Winner: number;
+  EndTime: number; UpdateTime: number;
+  PurchaseType: number; RegionType: number;
+}
+
+interface WatchItem {
+  server: number; area: number; slot: number; id: number;
+  /** 0=计划抽 1=已报名 */
+  mode: 0 | 1;
+  /** 已触发的提醒去重 key */
+  fired: string[];
+}
+
+interface UserSub {
+  chatId: number;
+  leadHours: number[];
+  items: WatchItem[];
+}
+
+interface Phase { state: number; end: number; estimated: boolean }
+
+// ═══════════════ 周期计算（与桌面端一致：9 天 = 申请 5 天 + 公示 4 天） ═══════════════
+
+const CYCLE_SEC = 9 * 86400;
+const ENTRY_SEC = 5 * 86400;
+
+function getPhase(house: HouseEntry, nowSec: number): Phase {
+  if (house.State !== 0 && house.EndTime > 0) {
+    return { state: house.State, end: house.EndTime, estimated: false };
+  }
+  const t0 = Math.min(house.FirstSeen, nowSec);
+  const cycles = Math.floor((nowSec - t0) / CYCLE_SEC);
+  const cycleStart = t0 + cycles * CYCLE_SEC;
+  const entryEnd = cycleStart + ENTRY_SEC;
+  const cycleEnd = cycleStart + CYCLE_SEC;
+  return nowSec < entryEnd
+    ? { state: 1, end: entryEnd, estimated: true }
+    : { state: 2, end: cycleEnd, estimated: true };
+}
+
+// ═══════════════ 售楼中心 API（KV 缓存 5 分钟） ═══════════════
+
+const API_BASE = 'https://house.ffxiv.cyou';
+const UA = 'FF14HouseReminder-Bot/0.1.0 (+https://github.com/fivood/ffxivhouse)';
+const CACHE_TTL_SEC = 300;
+
+async function getSales(env: Env, serverId: number): Promise<HouseEntry[]> {
+  const cacheKey = `houses:${serverId}`;
+  const cached = await env.KV.get<{ fetchedAt: number; entries: HouseEntry[] }>(cacheKey, 'json');
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (cached && nowSec - cached.fetchedAt < CACHE_TTL_SEC) return cached.entries;
+
+  const resp = await fetch(`${API_BASE}/api/sales?server=${serverId}`, {
+    headers: { 'User-Agent': UA },
+  });
+  if (!resp.ok) throw new Error(`sales API ${resp.status}`);
+  const entries = (await resp.json()) as HouseEntry[];
+  await env.KV.put(cacheKey, JSON.stringify({ fetchedAt: nowSec, entries }), { expirationTtl: 86400 });
+  return entries;
+}
+
+// ═══════════════ Telegram ═══════════════
+
+async function tgSend(env: Env, chatId: number, text: string): Promise<void> {
+  if (!env.TG_BOT_TOKEN) {
+    console.log(`[no-token] -> ${chatId}: ${text}`);
+    return;
+  }
+  const resp = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text }),
+  });
+  if (!resp.ok) console.error(`tgSend 失败 ${resp.status}: ${await resp.text()}`);
+}
+
+// ═══════════════ 订阅存取 ═══════════════
+
+async function getSub(env: Env, chatId: number): Promise<UserSub> {
+  return (await env.KV.get<UserSub>(`sub:${chatId}`, 'json'))
+    ?? { chatId, leadHours: [24, 1], items: [] };
+}
+
+async function saveSub(env: Env, sub: UserSub): Promise<void> {
+  await env.KV.put(`sub:${sub.chatId}`, JSON.stringify(sub));
+}
+
+// ═══════════════ Web 绑定令牌（HMAC，免账号体系） ═══════════════
+
+const WEB_BASE = 'https://ff14.70015.net';
+
+/** 用 webhook 密钥对 chatId 做 HMAC，生成绑定令牌（只有 Bot 能发给本人） */
+async function bindToken(env: Env, chatId: number): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(env.TG_WEBHOOK_SECRET ?? 'ff14house'),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`bind:${chatId}`));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
+}
+
+/** 校验 u/k 参数，返回 chatId 或 null */
+async function checkAuth(env: Env, url: URL): Promise<number | null> {
+  const chatId = parseInt(url.searchParams.get('u') ?? '', 10);
+  const k = url.searchParams.get('k') ?? '';
+  if (Number.isNaN(chatId) || !k) return null;
+  return (await bindToken(env, chatId)) === k ? chatId : null;
+}
+
+/** POST 体的 u/k 校验 */
+async function checkAuthBody(env: Env, body: { u?: number; k?: string }): Promise<number | null> {
+  if (typeof body.u !== 'number' || !body.k) return null;
+  return (await bindToken(env, body.u)) === body.k ? body.u : null;
+}
+
+// ═══════════════ 命令解析 ═══════════════
+
+function findServer(token: string): ServerInfo | null {
+  const byId = parseInt(token, 10);
+  if (!Number.isNaN(byId)) return ALL_SERVERS.find(s => s.id === byId) ?? null;
+  return ALL_SERVERS.find(s => s.name === token || s.name.startsWith(token)) ?? null;
+}
+
+function findArea(token: string): number {
+  let i = AREA_NAMES.indexOf(token);
+  if (i >= 0) return i;
+  i = AREA_ALIASES.findIndex(a => token.startsWith(a));
+  return i;
+}
+
+const HELP_TEXT = `🏠 FF14 抽房提醒 Bot
+
+命令：
+/watch 服务器 房区 区号 房号 — 关注（默认"计划抽"）
+　例：/watch 萌芽池 白银乡 14 43
+/list — 我的关注与倒计时
+/mode 序号 — 切换 计划抽/已报名
+/unwatch 序号 — 取消关注
+/lead 24,1 — 截止前提醒提前量（小时，逗号分隔）
+/servers — 服务器列表
+/help — 本帮助
+
+提醒时机：报名截止前 / 开奖 / 公示期领房死线 / 下轮开抽
+数据来源：house.ffxiv.cyou（玩家上报，可能有延迟）`;
+
+function fmtTime(unixSec: number): string {
+  return new Date(unixSec * 1000).toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
+function fmtRemain(nowSec: number, targetSec: number): string {
+  const span = targetSec - nowSec;
+  if (span <= 0) return '已到时间';
+  const d = Math.floor(span / 86400), h = Math.floor((span % 86400) / 3600), m = Math.floor((span % 3600) / 60);
+  if (d >= 1) return `剩余 ${d} 天 ${h} 小时`;
+  if (h >= 1) return `剩余 ${h} 小时 ${m} 分`;
+  return `剩余 ${m} 分`;
+}
+
+async function handleCommand(env: Env, chatId: number, text: string): Promise<void> {
+  const parts = text.trim().split(/[\s，,、]+/).filter(Boolean);
+  const cmd = (parts[0] ?? '').toLowerCase().replace(/@\w+$/, '');
+  const args = parts.slice(1);
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  switch (cmd) {
+    case '/start': {
+      const token = await bindToken(env, chatId);
+      await tgSend(env, chatId,
+        `${HELP_TEXT}\n\n🌐 网页版（管理关注更方便）：\n${WEB_BASE}/#u=${chatId}&k=${token}\n（此链接含你的专属令牌，别分享给他人）`);
+      return;
+    }
+    case '/help':
+      await tgSend(env, chatId, HELP_TEXT);
+      return;
+
+    case '/servers': {
+      const text = DATA_CENTERS
+        .map(dc => `【${dc.name}】${dc.servers.map(s => s.name).join('、')}`)
+        .join('\n');
+      await tgSend(env, chatId, text);
+      return;
+    }
+
+    case '/watch': {
+      // 支持 "/watch 萌芽池 白银乡 14 43" 和 "/watch 萌芽池 白银乡 14区43号"
+      let tokens = args.flatMap(a => {
+        const m = a.match(/^(\d+)区(\d+)号?$/);
+        return m ? [m[1], m[2]] : [a];
+      });
+      if (tokens.length < 4) {
+        await tgSend(env, chatId, '格式：/watch 服务器 房区 区号 房号\n例：/watch 萌芽池 白银乡 14 43');
+        return;
+      }
+      const server = findServer(tokens[0]);
+      const area = findArea(tokens[1]);
+      const slot = parseInt(tokens[2], 10);
+      const plotId = parseInt(tokens[3], 10);
+      if (!server || area < 0 || Number.isNaN(slot) || Number.isNaN(plotId)
+        || slot < 1 || slot > 30 || plotId < 1 || plotId > 60) {
+        await tgSend(env, chatId, '没看懂参数。服务器名见 /servers，房区：海雾村/薰衣草苗圃/高脚孤丘/白银乡/穹顶皓天，区号 1-30，房号 1-60。');
+        return;
+      }
+
+      const sub = await getSub(env, chatId);
+      if (sub.items.some(i => i.server === server.id && i.area === area && i.slot === slot - 1 && i.id === plotId)) {
+        await tgSend(env, chatId, '这套房已经在你的关注列表里了。');
+        return;
+      }
+      sub.items.push({ server: server.id, area, slot: slot - 1, id: plotId, mode: 0, fired: [] });
+      await saveSub(env, sub);
+      await tgSend(env, chatId,
+        `✅ 已关注：${server.name} ${AREA_NAMES[area]} ${slot}区 ${plotId}号 [${SIZE_NAMES[sizeOf(area, plotId)] ?? '?'}]\n` +
+        `模式：计划抽。报名后用 /mode ${sub.items.length} 标记已报名。`);
+      return;
+    }
+
+    case '/list': {
+      const sub = await getSub(env, chatId);
+      if (sub.items.length === 0) {
+        await tgSend(env, chatId, '关注列表为空。用 /watch 添加，详见 /help');
+        return;
+      }
+      const lines: string[] = [`共 ${sub.items.length} 项（提前量 ${sub.leadHours.join(',')} 小时）：`];
+      for (let i = 0; i < sub.items.length; i++) {
+        const w = sub.items[i];
+        const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
+        const pos = `${i + 1}. ${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?'}]`;
+        const modeText = w.mode === 0 ? '计划抽' : '已报名';
+        try {
+          const sales = await getSales(env, w.server);
+          const house = sales.find(h => h.Area === w.area && h.Slot === w.slot && h.ID === w.id);
+          if (!house) {
+            lines.push(`${pos}（${modeText}）\n　已售出或下架`);
+          } else {
+            const phase = getPhase(house, nowSec);
+            lines.push(`${pos}（${modeText}）\n　${STATE_NAMES[phase.state]}${phase.estimated ? '（推测）' : ''} ${fmtRemain(nowSec, phase.end)} · ${fmtTime(phase.end)} 截止`);
+          }
+        } catch {
+          lines.push(`${pos}（${modeText}）\n　数据获取失败`);
+        }
+      }
+      await tgSend(env, chatId, lines.join('\n'));
+      return;
+    }
+
+    case '/mode': {
+      const n = parseInt(args[0] ?? '', 10);
+      const sub = await getSub(env, chatId);
+      if (Number.isNaN(n) || n < 1 || n > sub.items.length) {
+        await tgSend(env, chatId, `格式：/mode 序号（1-${sub.items.length}，序号见 /list）`);
+        return;
+      }
+      const item = sub.items[n - 1];
+      item.mode = item.mode === 0 ? 1 : 0;
+      item.fired = [];
+      await saveSub(env, sub);
+      await tgSend(env, chatId, `第 ${n} 项已切换为「${item.mode === 1 ? '已报名' : '计划抽'}」。`);
+      return;
+    }
+
+    case '/unwatch': {
+      const n = parseInt(args[0] ?? '', 10);
+      const sub = await getSub(env, chatId);
+      if (Number.isNaN(n) || n < 1 || n > sub.items.length) {
+        await tgSend(env, chatId, `格式：/unwatch 序号（1-${sub.items.length}，序号见 /list）`);
+        return;
+      }
+      sub.items.splice(n - 1, 1);
+      await saveSub(env, sub);
+      await tgSend(env, chatId, `已取消关注第 ${n} 项。`);
+      return;
+    }
+
+    case '/lead': {
+      const hours = (args[0] ?? '').split(',').map(s => parseInt(s.trim(), 10))
+        .filter(h => !Number.isNaN(h) && h >= 0 && h <= 8760);
+      if (hours.length === 0) {
+        await tgSend(env, chatId, '格式：/lead 24,1（小时，逗号分隔）');
+        return;
+      }
+      const sub = await getSub(env, chatId);
+      sub.leadHours = [...new Set(hours)].sort((a, b) => b - a);
+      await saveSub(env, sub);
+      await tgSend(env, chatId, `提前量已设为 ${sub.leadHours.join(',')} 小时。`);
+      return;
+    }
+
+    default:
+      await tgSend(env, chatId, '未知命令，发 /help 查看用法。');
+  }
+}
+
+// ═══════════════ 提醒引擎 ═══════════════
+
+interface DueReminder { chatId: number; title: string; body: string }
+
+async function runReminders(env: Env): Promise<void> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const subKeys = await env.KV.list({ prefix: 'sub:' });
+  if (subKeys.keys.length === 0) return;
+
+  // 先收集需要哪些服务器的数据
+  const subs: UserSub[] = [];
+  for (const key of subKeys.keys) {
+    const sub = await env.KV.get<UserSub>(key.name, 'json');
+    if (sub && sub.items.length > 0) subs.push(sub);
+  }
+  if (subs.length === 0) return;
+
+  const serverIds = [...new Set(subs.flatMap(s => s.items.map(i => i.server)))];
+
+  // 拉取（有 5 分钟 KV 缓存）
+  const salesByServer = new Map<number, HouseEntry[]>();
+  for (const serverId of serverIds) {
+    try {
+      salesByServer.set(serverId, await getSales(env, serverId));
+    } catch (e) {
+      console.error(`拉取服务器 ${serverId} 失败`, e);
+    }
+  }
+
+  for (const sub of subs) {
+    let dirty = false;
+    const due: DueReminder[] = [];
+
+    for (const w of sub.items) {
+      const house = salesByServer.get(w.server)
+        ?.find(h => h.Area === w.area && h.Slot === w.slot && h.ID === w.id);
+      if (!house) continue;
+
+      const phase = getPhase(house, nowSec);
+      const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
+      const pos = `${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?'}]`;
+      const suffix = (phase.estimated ? '\n（推测数据，建议登录游戏复核）' : '')
+        + (nowSec - house.LastSeen > 7200 ? '\n⚠ 数据已较久未更新，请以游戏内实际为准' : '');
+
+      const consider = (type: number, leadH: number | null, fireAtSec: number, title: string, body: string) => {
+        // 提前量已过但阶段未结束：立即提醒一次
+        let fire = fireAtSec;
+        if (fire <= nowSec && phase.end > nowSec) fire = nowSec;
+        if (fire > nowSec) return; // 未到时间
+        const key = `${w.server}:${w.area}:${w.slot}:${w.id}|${type}|${phase.end}|${leadH ?? 'x'}`;
+        if (w.fired.includes(key)) return;
+        w.fired.push(key);
+        if (w.fired.length > 50) w.fired.splice(0, w.fired.length - 50);
+        dirty = true;
+        due.push({ chatId: sub.chatId, title, body: body + suffix });
+      };
+
+      if (phase.state === 1) {
+        if (w.mode === 0) {
+          for (const h of sub.leadHours) {
+            consider(0, h, phase.end - h * 3600, '⏰ 抽房报名即将截止',
+              `${pos}\n申请期将于 ${fmtTime(phase.end)} 截止，想去抽记得上线报名！`);
+          }
+        } else {
+          consider(1, null, phase.end, '🎉 抽房结果已公布',
+            `${pos}\n进入公示期，你参与抽签的房子开奖了，快去查看结果！`);
+        }
+      } else if (phase.state === 2) {
+        for (const h of sub.leadHours) {
+          consider(2, h, phase.end - h * 3600, '⚠️ 领房/领回押金即将截止',
+            `${pos}\n公示期将于 ${fmtTime(phase.end)} 截止。中签请尽快购入；落选记得领回押金，逾期会有损失！`);
+        }
+      } else if (phase.state === 3) {
+        if (w.mode === 0) {
+          consider(3, null, phase.end, '🔔 新一轮抽签开始',
+            `${pos}\n预计于 ${fmtTime(phase.end)} 开放抽签预约，想去抽记得上线！`);
+        }
+      }
+    }
+
+    for (const r of due) {
+      await tgSend(env, r.chatId, `${r.title}\n\n${r.body}`);
+    }
+    if (dirty) await saveSub(env, sub);
+  }
+
+  console.log(`提醒检查完成：${subs.length} 个订阅，${serverIds.length} 个服务器`);
+}
+
+// ═══════════════ Web API ═══════════════
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+  });
+}
+
+/** 关注项 + 实时状态（供网页版展示） */
+async function enrichWatch(env: Env, sub: UserSub): Promise<unknown[]> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const result: unknown[] = [];
+  for (const w of sub.items) {
+    const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
+    const base = {
+      server: w.server, serverName, area: w.area, areaName: AREA_NAMES[w.area],
+      slot: w.slot, slotNo: w.slot + 1, id: w.id,
+      size: SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?', mode: w.mode,
+    };
+    try {
+      const sales = await getSales(env, w.server);
+      const house = sales.find(h => h.Area === w.area && h.Slot === w.slot && h.ID === w.id);
+      if (!house) {
+        result.push({ ...base, gone: true });
+      } else {
+        const phase = getPhase(house, nowSec);
+        result.push({
+          ...base,
+          gone: false,
+          price: house.Price,
+          state: phase.state, stateName: STATE_NAMES[phase.state],
+          estimated: phase.estimated, phaseEnd: phase.end,
+          stale: nowSec - house.LastSeen > 7200,
+          purchaseType: house.PurchaseType, regionType: house.RegionType,
+        });
+      }
+    } catch {
+      result.push({ ...base, gone: false, error: true });
+    }
+  }
+  return result;
+}
+
+async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
+  const path = url.pathname;
+
+  if (path === '/api/servers' && request.method === 'GET') {
+    return json(DATA_CENTERS.map(dc => ({ name: dc.name, servers: dc.servers })));
+  }
+
+  if (path === '/api/sales' && request.method === 'GET') {
+    const server = parseInt(url.searchParams.get('server') ?? '', 10);
+    if (Number.isNaN(server)) return json({ error: 'server 参数无效' }, 400);
+    try {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const entries = await getSales(env, server);
+      return json(entries.map(h => {
+        const phase = getPhase(h, nowSec);
+        return {
+          server: h.Server, area: h.Area, areaName: AREA_NAMES[h.Area] ?? '?',
+          slot: h.Slot, slotNo: h.Slot + 1, id: h.ID, price: h.Price,
+          size: SIZE_NAMES[h.Size >= 0 && h.Size <= 2 ? h.Size : sizeOf(h.Area, h.ID)] ?? '?',
+          state: phase.state, stateName: STATE_NAMES[phase.state],
+          estimated: phase.estimated, phaseEnd: phase.end,
+          participate: h.Participate,
+          stale: nowSec - h.LastSeen > 7200,
+          purchaseType: h.PurchaseType, regionType: h.RegionType,
+        };
+      }));
+    } catch {
+      return json({ error: '数据获取失败' }, 502);
+    }
+  }
+
+  if (path === '/api/watch' && request.method === 'GET') {
+    const chatId = await checkAuth(env, url);
+    if (chatId == null) return json({ error: '未绑定或令牌无效，请通过 Bot /start 获取专属链接' }, 401);
+    const sub = await getSub(env, chatId);
+    return json({ leadHours: sub.leadHours, items: await enrichWatch(env, sub) });
+  }
+
+  if (path === '/api/watch' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const { server, area, slot, id } = body;
+    if (typeof server !== 'number' || typeof area !== 'number' || typeof slot !== 'number' || typeof id !== 'number'
+      || !ALL_SERVERS.some(s => s.id === server) || area < 0 || area > 4 || slot < 0 || slot > 29 || id < 1 || id > 60) {
+      return json({ error: '参数无效' }, 400);
+    }
+    const sub = await getSub(env, chatId);
+    if (sub.items.some(i => i.server === server && i.area === area && i.slot === slot && i.id === id)) {
+      return json({ ok: true, message: '已在关注列表中' });
+    }
+    sub.items.push({ server, area, slot, id, mode: 0, fired: [] });
+    await saveSub(env, sub);
+    return json({ ok: true });
+  }
+
+  if (path === '/api/watch' && request.method === 'DELETE') {
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const sub = await getSub(env, chatId);
+    const before = sub.items.length;
+    sub.items = sub.items.filter(i =>
+      !(i.server === body.server && i.area === body.area && i.slot === body.slot && i.id === body.id));
+    if (sub.items.length === before) return json({ error: '未找到该关注项' }, 404);
+    await saveSub(env, sub);
+    return json({ ok: true });
+  }
+
+  if (path === '/api/mode' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const sub = await getSub(env, chatId);
+    const item = sub.items.find(i =>
+      i.server === body.server && i.area === body.area && i.slot === body.slot && i.id === body.id);
+    if (!item) return json({ error: '未找到该关注项' }, 404);
+    item.mode = item.mode === 0 ? 1 : 0;
+    item.fired = [];
+    await saveSub(env, sub);
+    return json({ ok: true, mode: item.mode });
+  }
+
+  if (path === '/api/lead' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; hours?: number[] };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const hours = (body.hours ?? []).filter(h => typeof h === 'number' && h >= 0 && h <= 8760);
+    if (hours.length === 0) return json({ error: 'hours 参数无效' }, 400);
+    const sub = await getSub(env, chatId);
+    sub.leadHours = [...new Set(hours)].sort((a, b) => b - a);
+    await saveSub(env, sub);
+    return json({ ok: true, leadHours: sub.leadHours });
+  }
+
+  return json({ error: 'not found' }, 404);
+}
+
+// ═══════════════ 入口 ═══════════════
+
+interface TgUpdate {
+  message?: { chat: { id: number }; text?: string };
+}
+
+export default {
+  /** Telegram Webhook + Web API */
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+
+    if (url.pathname.startsWith('/api/')) {
+      return handleApi(request, env, url);
+    }
+
+    if (url.pathname === '/webhook' && request.method === 'POST') {
+      // 校验 Telegram 的 secret_token 头
+      const secret = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
+      if (!env.TG_WEBHOOK_SECRET || secret !== env.TG_WEBHOOK_SECRET) {
+        return new Response('forbidden', { status: 403 });
+      }
+      const update = (await request.json()) as TgUpdate;
+      const chatId = update.message?.chat.id;
+      const text = update.message?.text;
+      if (chatId && text) {
+        // 先响应 Telegram，命令处理放后台
+        ctx.waitUntil(handleCommand(env, chatId, text));
+      }
+      return new Response('ok', { status: 200 });
+    }
+
+    return new Response('not found', { status: 404 });
+  },
+
+  /** Cron：每 2 分钟检查提醒 */
+  async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(runReminders(env));
+  },
+} satisfies ExportedHandler<Env>;

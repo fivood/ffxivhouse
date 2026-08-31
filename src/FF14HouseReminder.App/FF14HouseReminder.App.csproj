@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>FF14HouseReminder</AssemblyName>
+    <RootNamespace>FF14HouseReminder</RootNamespace>
+    <Version>0.1.0</Version>
+    <AssemblyInformationalVersion>0.1.0</AssemblyInformationalVersion>
+    <Description>FF14 抽房时间提醒工具</Description>
+    <Product>FF14HouseReminder</Product>
+    <ApplicationIcon>Resources\house.ico</ApplicationIcon>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <!-- 公开版构建：dotnet build/publish -p:PublicBuild=true，剥离本地直报功能 -->
+  <PropertyGroup Condition="'$(PublicBuild)'=='true'">
+    <DefineConstants>$(DefineConstants);PUBLIC_BUILD</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\house.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+    <PackageReference Include="TaskScheduler" Version="2.12.2" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>
+
