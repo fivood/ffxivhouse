@@ -14,6 +14,8 @@
     <Product>抽房了吗</Product>
     <ApplicationIcon>Resources\house.ico</ApplicationIcon>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- 只留中英文的框架资源，其余语言的附属程序集约 13MB，用不上 -->
+    <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <!-- 公开版构建：dotnet build/publish -p:PublicBuild=true，剥离本地直报功能 -->
@@ -30,7 +32,6 @@
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="2.0.1" />
     <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
     <PackageReference Include="TaskScheduler" Version="2.12.2" />
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>
