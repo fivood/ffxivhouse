@@ -405,29 +405,34 @@ function homeKey(h) { return `${h.server}:${h.area}:${h.slot}:${h.id}`; }
 function renderHomes() {
   const el = $('homeList');
   if (!myHomes.length) { el.innerHTML = '<div class="empty">暂无登记，在下方添加</div>'; return; }
-  const sorted = [...myHomes].sort((a, b) => a.remainDays - b.remainDays);
-  el.innerHTML = sorted.map(h => {
-    const key = homeKey(h);
-    let status;
-    if (h.lastEnteredAt <= 0) {
-      status = '<span class="est">进房时间未知，进房后打卡</span>';
-    } else {
-      const d = h.remainDays;
-      const color = d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : d <= 10 ? '#A66A00' : '#4C7A34';
-      const mark = d <= 1 ? '🔴' : d <= 5 ? '🟠' : '🟢';
-      status = `<span style="color:${color};font-weight:bold">${mark} 剩余 ${d} 天</span>` +
-        ` <span class="meta">最后进房 ${fmtDate(h.lastEnteredAt)}</span>`;
-    }
+    const sorted = [...myHomes].sort((a, b) => a.remainDays - b.remainDays);
+    el.innerHTML = sorted.map(h => {
+      const key = homeKey(h);
+      let status;
+      if (h.demolishedAt > 0) {
+        const d = Math.floor((h.furnitureDeadline - Date.now() / 1000) / 86400);
+        status = `<span style="color:${d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : '#7B5EA7'};font-weight:bold">💥 已炸房，旧家具保管${d >= 0 ? `还剩 ${d} 天` : '已到期！'}</span>` +
+          ` <span class="meta">${fmtDate(h.furnitureDeadline)} 到期</span>`;
+      } else if (h.lastEnteredAt <= 0) {
+        status = '<span class="est">进房时间未知，进房后打卡</span>';
+      } else {
+        const d = h.remainDays;
+        const color = d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : d <= 10 ? '#A66A00' : '#4C7A34';
+        const mark = d <= 1 ? '🔴' : d <= 5 ? '🟠' : '🟢';
+        status = `<span style="color:${color};font-weight:bold">${mark} 剩余 ${d} 天</span>` +
+          ` <span class="meta">最后进房 ${fmtDate(h.lastEnteredAt)}</span>`;
+      }
     return `<div class="item">
       <div class="row"><span class="title">${h.serverName} ${h.areaName} ${h.slotNo}区 ${h.id}号 <span class="meta">${h.label}</span></span></div>
       <div>${status}</div>
       <div class="home-actions">
-        <button class="icon-btn" title="刚进过房，打卡重置倒计时" onclick="enteredHome('${key}')">
+        ${h.demolishedAt > 0 ? '' : `<button class="icon-btn" title="刚进过房，打卡重置倒计时" onclick="enteredHome('${key}')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           <span style="margin-left:3px">已进房</span>
         </button>
         <input type="date" id="bd-${key}" title="补签：选实际进房日期">
-        <button class="icon-btn" title="按所选日期补签" onclick="backfillHome('${key}')">补签</button>
+        <button class="icon-btn" title="按所选日期补签" onclick="backfillHome('${key}')">补签</button>`}
+        <button class="icon-btn" title="${h.demolishedAt > 0 ? '取消炸房标记' : '房子被拆了？标记后开始旧家具 35 天保管倒计时'}" onclick="demolishHome('${key}')">${h.demolishedAt > 0 ? '取消炸房' : '炸房'}</button>
         <button class="icon-btn" title="移除" onclick="removeHome('${key}')">✕</button>
       </div>
     </div>`;
@@ -477,6 +482,15 @@ async function backfillHome(key) {
     toast('已补签至 ' + dateVal);
     await loadWatch();
   } else toast(data.error || '补签失败');
+}
+
+async function demolishHome(key) {
+  const resp = await api('POST', '/api/demolished', parseKey(key));
+  const data = await resp.json();
+  if (resp.ok) {
+    toast(data.demolishedAt > 0 ? '已标记炸房，家具保管倒计时开始' : '已取消炸房标记');
+    await loadWatch();
+  } else toast(data.error || '操作失败');
 }
 
 // ── 操作 ──

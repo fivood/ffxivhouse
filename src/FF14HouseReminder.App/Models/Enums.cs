@@ -54,7 +54,11 @@ public enum ReminderType
     /// <summary>下轮申请期开始</summary>
     NextEntryStart = 3,
     /// <summary>炸房警告（45 天未进房）</summary>
-    Demolition = 4
+    Demolition = 4,
+    /// <summary>落选押金返还死线（公示期结束后 90 天）</summary>
+    DepositDeadline = 5,
+    /// <summary>炸房后旧家具保管死线（35 天）</summary>
+    FurnitureDeadline = 6
 }
 
 /// <summary>数据来源</summary>

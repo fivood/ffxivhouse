@@ -240,6 +240,11 @@
                                                 Command="{Binding DataContext.BackfillHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
+                                        <Button Content="炸房" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                                ToolTip="房子被拆了？标记后开始旧家具 35 天保管倒计时（再点取消）"
+                                                Command="{Binding DataContext.DemolishHomeCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                CommandParameter="{Binding}"/>
                                         <Button Content="✕" Style="{StaticResource RetroBtn}" Margin="0"
                                                 Command="{Binding DataContext.RemoveHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"

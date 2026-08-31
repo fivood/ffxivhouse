@@ -83,6 +83,8 @@ interface HomeEntry {
   label: string;
   /** 最后一次进房时间（unix 秒），0=未知 */
   lastEnteredAt: number;
+  /** 炸房（被拆除）时间（unix 秒），0=未炸房。炸房后旧家具由 NPC 保管 35 天 */
+  demolishedAt?: number;
   fired: string[];
 }
 
@@ -90,6 +92,10 @@ interface HomeEntry {
 const DEMOLITION_DAYS = 45;
 /** 炸房提醒提前量（天） */
 const DEMOLITION_LEAD_DAYS = [10, 5, 1];
+/** 落选押金返还期限：公示期结束后 90 天 */
+const DEPOSIT_DAYS = 90;
+/** 炸房后旧家具保管期限（天） */
+const FURNITURE_DAYS = 35;
 
 interface UserSub {
   chatId: number;
@@ -295,6 +301,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /myhome 服务器 房区 区号 房号 [角色名] — 登记我的房产
 　例：/myhome 萌芽池 白银乡 14 43 阿光
 /entered [序号] [日期] — 进房打卡；带日期=补签（如 /entered 1 8-30）
+/demolished [序号] — 标记房子已被拆除（开始旧家具 35 天保管倒计时），再发一次取消
 /homes — 我的房产与炸房倒计时
 
 数据来源：house.ffxiv.cyou（玩家上报，可能有延迟）`;
@@ -588,6 +595,38 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
       return;
     }
 
+    case '/demolished': {
+      const sub = await getSub(env, chatId);
+      const homes = sub.homes ?? [];
+      if (homes.length === 0) {
+        await tgSend(env, chatId, '还没有登记房产，用 /myhome 登记。');
+        return;
+      }
+      let idx = homes.length === 1 ? 0 : -1;
+      if (args.length > 0) {
+        const n = parseInt(args[0], 10);
+        if (!Number.isNaN(n)) idx = n - 1;
+      }
+      if (idx < 0 || idx >= homes.length) {
+        const list = homes.map((h, i) => `${i + 1}. ${h.label}`).join('\n');
+        await tgSend(env, chatId, `请指定序号：/demolished 序号\n${list}`);
+        return;
+      }
+      const h = homes[idx];
+      if (h.demolishedAt && h.demolishedAt > 0) {
+        h.demolishedAt = 0;
+        await saveSub(env, sub);
+        await tgSend(env, chatId, `已取消「${h.label}」的炸房标记，恢复进房倒计时。`);
+      } else {
+        h.demolishedAt = Math.floor(Date.now() / 1000);
+        h.fired = [];
+        await saveSub(env, sub);
+        await tgSend(env, chatId,
+          `已标记「${h.label}」被拆除。\n🪑 旧家具由管理人保管 ${FURNITURE_DAYS} 天（至 ${fmtTime(h.demolishedAt + FURNITURE_DAYS * 86400)}），记得去取回！到期前会再提醒你。`);
+      }
+      return;
+    }
+
     case '/homes': {
       const sub = await getSub(env, chatId);
       const homes = sub.homes ?? [];
@@ -599,6 +638,11 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
       const lines = homes.map((h, i) => {
         const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
         const pos = `${i + 1}. ${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
+        if (h.demolishedAt && h.demolishedAt > 0) {
+          const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
+          const days = Math.floor((fDeadline - nowSec) / 86400);
+          return `${pos}\n　💥 已炸房，旧家具保管${days >= 0 ? `还剩 ${days} 天` : '已到期！'}（${fmtTime(fDeadline).slice(0, 5)} 到期）`;
+        }
         if (h.lastEnteredAt <= 0) return `${pos}\n　进房时间未知，进房后发 /entered ${i + 1}`;
         const deadline = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
         const remain = deadline - nowSec;
@@ -653,12 +697,43 @@ async function runReminders(env: Env): Promise<void> {
     let dirty = false;
     const due: DueReminder[] = [];
 
-    // ── 炸房提醒（45 天未进房）──
+    // ── 炸房提醒（45 天未进房 / 炸房后旧家具保管 35 天）──
     for (const h of sub.homes ?? []) {
-      if (h.lastEnteredAt <= 0) continue;
-      const deadlineSec = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
       const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
       const pos = `${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
+
+      // 已炸房：旧家具保管 35 天死线
+      if (h.demolishedAt && h.demolishedAt > 0) {
+        const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
+        for (const days of DEMOLITION_LEAD_DAYS) {
+          const fireSec = fDeadline - days * 86400;
+          if (nowSec < fireSec || nowSec >= fDeadline) continue;
+          const key = `furn|${fDeadline}|${days}`;
+          if (h.fired.includes(key)) continue;
+          h.fired.push(key);
+          dirty = true;
+          due.push({
+            chatId: sub.chatId,
+            title: `🪑 旧家具保管即将到期：还剩 ${days} 天`,
+            body: `${pos}\n已被拆除，旧家具由管理人保管 ${FURNITURE_DAYS} 天，将于 ${fmtTime(fDeadline)} 到期！请尽快去住宅区管理人处取回，逾期将被丢弃！`,
+            homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
+          });
+        }
+        if (nowSec >= fDeadline && !h.fired.includes(`furn|${fDeadline}|over`)) {
+          h.fired.push(`furn|${fDeadline}|over`);
+          dirty = true;
+          due.push({
+            chatId: sub.chatId,
+            title: '🪑 旧家具保管已到期',
+            body: `${pos}\n旧家具保管 ${FURNITURE_DAYS} 天期限已到！若还没取回，请立刻去管理人处确认！`,
+            homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
+          });
+        }
+        continue; // 炸房的不再做进房倒计时
+      }
+
+      if (h.lastEnteredAt <= 0) continue;
+      const deadlineSec = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
 
       for (const days of DEMOLITION_LEAD_DAYS) {
         const fireSec = deadlineSec - days * 86400;
@@ -700,12 +775,13 @@ async function runReminders(env: Env): Promise<void> {
       const suffix = (phase.estimated ? '\n（推测数据，建议登录游戏复核）' : '')
         + (nowSec - house.LastSeen > 7200 ? '\n⚠ 数据已较久未更新，请以游戏内实际为准' : '');
 
-      const consider = (type: number, leadH: number | null, fireAtSec: number, title: string, body: string) => {
+      const consider = (type: number, leadH: number | null, fireAtSec: number, title: string, body: string, anchorSec?: number) => {
+        const anchor = anchorSec ?? phase.end;
         // 提前量已过但阶段未结束：立即提醒一次
         let fire = fireAtSec;
-        if (fire <= nowSec && phase.end > nowSec) fire = nowSec;
+        if (fire <= nowSec && anchor > nowSec) fire = nowSec;
         if (fire > nowSec) return; // 未到时间
-        const key = `${w.server}:${w.area}:${w.slot}:${w.id}|${type}|${phase.end}|${leadH ?? 'x'}`;
+        const key = `${w.server}:${w.area}:${w.slot}:${w.id}|${type}|${anchor}|${leadH ?? 'x'}`;
         if (w.fired.includes(key)) return;
         w.fired.push(key);
         if (w.fired.length > 50) w.fired.splice(0, w.fired.length - 50);
@@ -724,9 +800,19 @@ async function runReminders(env: Env): Promise<void> {
             `${pos}\n进入公示期，你参与抽签的房子开奖了，快去查看结果！`);
         }
       } else if (phase.state === 2) {
+        // 确认归属死线（两种模式都提醒）
         for (const h of sub.leadHours) {
-          consider(2, h, phase.end - h * 3600, '⚠️ 领房/领回押金即将截止',
-            `${pos}\n公示期将于 ${fmtTime(phase.end)} 截止。中签请尽快购入；落选记得领回押金，逾期会有损失！`);
+          consider(2, h, phase.end - h * 3600, '⚠️ 公示期即将截止（确认归属死线）',
+            `${pos}\n公示期将于 ${fmtTime(phase.end)} 截止。中签请立即购入，逾期将失去资格并被扣除 50% 申请金！`);
+        }
+        // 落选押金返还死线 = 公示期结束后 90 天（仅已报名）
+        if (w.mode === 1) {
+          const depositEnd = phase.end + DEPOSIT_DAYS * 86400;
+          for (const h of sub.leadHours) {
+            consider(5, h, depositEnd - h * 3600, '💰 落选押金返还即将截止',
+              `${pos}\n若你上轮落选，押金返还期限（公示期结束后 ${DEPOSIT_DAYS} 天）将于 ${fmtTime(depositEnd)} 截止，逾期将不予返还！记得上线点门牌领回金币。`,
+              depositEnd);
+          }
         }
       } else if (phase.state === 3) {
         if (w.mode === 0) {
@@ -841,7 +927,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         area: h.area, areaName: AREA_NAMES[h.area], slot: h.slot, slotNo: h.slot + 1,
         id: h.id, label: h.label,
         lastEnteredAt: h.lastEnteredAt,
+        demolishedAt: h.demolishedAt ?? 0,
         deadline: h.lastEnteredAt > 0 ? h.lastEnteredAt + DEMOLITION_DAYS * 86400 : 0,
+        furnitureDeadline: (h.demolishedAt ?? 0) > 0 ? (h.demolishedAt ?? 0) + FURNITURE_DAYS * 86400 : 0,
         remainDays: h.lastEnteredAt > 0 ? Math.floor((h.lastEnteredAt + DEMOLITION_DAYS * 86400 - nowSec) / 86400) : -1,
       })),
       items: await enrichWatch(env, sub),
@@ -969,6 +1057,23 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     home.fired = [];
     await saveSub(env, sub);
     return json({ ok: true });
+  }
+
+  if (path === '/api/demolished' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const sub = await getSub(env, chatId);
+    const home = (sub.homes ?? []).find(h =>
+      h.server === body.server && h.area === body.area && h.slot === body.slot && h.id === body.id);
+    if (!home) return json({ error: '未找到该房产' }, 404);
+    // 标记/取消炸房
+    home.demolishedAt = (home.demolishedAt && home.demolishedAt > 0)
+      ? 0
+      : Math.floor(Date.now() / 1000);
+    home.fired = [];
+    await saveSub(env, sub);
+    return json({ ok: true, demolishedAt: home.demolishedAt });
   }
 
   if (path === '/api/wxpusher' && request.method === 'POST') {

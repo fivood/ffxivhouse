@@ -88,16 +88,29 @@ public class ReminderEngine
                     break;
 
                 case LotteryState.ResultsPeriod:
-                    // 公示期死线对两种关注模式都提醒：已报名要去看结果/领钱，计划抽也该知道本轮结果
+                    // 确认归属死线对两种关注模式都提醒：已报名要去看结果/购入，计划抽也该知道本轮结果
                     if (settings.NotifyClaimDeadline)
                     {
                         foreach (var h in settings.LeadHours)
                         {
                             Add(ReminderType.ClaimDeadline, h, phase.PhaseEnd.AddHours(-h),
                                 phase.PhaseEnd, watch.Key.ToString(),
-                                "领房/领回押金即将截止",
+                                "公示期即将截止（确认归属死线）",
                                 $"{pos} 公示期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止。" +
-                                "中签请尽快购入；落选记得领回押金，逾期会有损失！");
+                                "中签请立即购入，逾期将失去资格并被扣除 50% 申请金！");
+                        }
+                    }
+                    // 落选押金返还死线 = 公示期结束后 90 天（仅已报名）
+                    if (settings.NotifyDepositDeadline && watch.Mode == WatchMode.Participated)
+                    {
+                        var depositDeadline = phase.PhaseEnd.AddDays(90);
+                        foreach (var h in settings.LeadHours)
+                        {
+                            Add(ReminderType.DepositDeadline, h, depositDeadline.AddHours(-h),
+                                depositDeadline, watch.Key.ToString(),
+                                "落选押金返还即将截止",
+                                $"{pos} 若你上轮落选，押金返还期限（公示期结束后 90 天）将于 " +
+                                $"{depositDeadline.LocalDateTime:MM-dd HH:mm} 截止，逾期将不予返还！记得上线点门牌领回金币。");
                         }
                     }
                     break;
@@ -117,10 +130,31 @@ public class ReminderEngine
         // ── 炸房提醒（45 天未进房）──
         foreach (var home in _config.Config.Homes)
         {
-            if (home.LastEnteredAt <= 0) continue;
-            var deadline = home.Deadline;
             var homeKey = $"home:{home.Key}";
             var pos = $"{home.PositionText}（{home.Label}）";
+
+            // 已炸房：旧家具保管 35 天死线
+            if (home.DemolishedAt > 0)
+            {
+                var furnitureDeadline = home.FurnitureDeadline;
+                foreach (var days in DemolitionLeadDays)
+                {
+                    Add2(ReminderType.FurnitureDeadline, days, furnitureDeadline.AddDays(-days), furnitureDeadline, homeKey,
+                        $"旧家具保管即将到期：还剩 {days} 天",
+                        $"{pos} 已被拆除，旧家具由 NPC 保管 35 天，将于 {furnitureDeadline.LocalDateTime:MM-dd HH:mm} 到期！" +
+                        "请尽快去住宅区的管理人处取回家具，逾期将被丢弃！");
+                }
+                if (now >= furnitureDeadline)
+                {
+                    Add2(ReminderType.FurnitureDeadline, 0, now, furnitureDeadline, homeKey,
+                        "旧家具保管已到期",
+                        $"{pos} 的旧家具保管 35 天期限已到！若还没取回，请立刻去管理人处确认！");
+                }
+                continue; // 炸房的不再做进房倒计时
+            }
+
+            if (home.LastEnteredAt <= 0) continue;
+            var deadline = home.Deadline;
 
             foreach (var days in DemolitionLeadDays)
             {

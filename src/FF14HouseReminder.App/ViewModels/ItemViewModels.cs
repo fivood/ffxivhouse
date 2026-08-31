@@ -117,6 +117,18 @@ public partial class HomeViewModel : ObservableObject
 
     public void Refresh(DateTimeOffset now)
     {
+        // 已炸房：显示旧家具保管倒计时
+        if (Item.DemolishedAt > 0)
+        {
+            var fRemain = Item.FurnitureDeadline - now;
+            var fDays = (int)Math.Floor(fRemain.TotalDays);
+            StatusText = fDays >= 0
+                ? $"💥 已炸房，旧家具保管还剩 {fDays} 天（{Item.FurnitureDeadline.LocalDateTime:MM-dd} 到期）"
+                : "💥 已炸房，旧家具保管已到期！";
+            StatusColor = fDays <= 1 ? "#B03030" : fDays <= 5 ? "#B06030" : "#7B5EA7";
+            return;
+        }
+
         if (Item.LastEnteredAt <= 0)
         {
             StatusText = "进房时间未知，进房后打卡";

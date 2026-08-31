@@ -47,8 +47,11 @@ public class ReminderSettings
     /// <summary>开奖提醒（进入公示期）</summary>
     public bool NotifyResultsStart { get; set; } = true;
 
-    /// <summary>公示期截止前提醒（领房 / 落选领回押金死线）</summary>
+    /// <summary>公示期截止前提醒（中签确认归属死线，逾期扣 50% 申请金）</summary>
     public bool NotifyClaimDeadline { get; set; } = true;
+
+    /// <summary>落选押金返还死线提醒（公示期结束后 90 天，逾期不返还）</summary>
+    public bool NotifyDepositDeadline { get; set; } = true;
 
     /// <summary>下轮申请期开始提醒</summary>
     public bool NotifyNextEntryStart { get; set; } = true;

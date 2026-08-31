@@ -46,7 +46,8 @@
             </WrapPanel>
                 <CheckBox Content="申请期截止前提醒（快去报名）" IsChecked="{Binding NotifyEntryDeadline}"/>
                 <CheckBox Content="开奖提醒（进入公示期，仅已报名）" IsChecked="{Binding NotifyResultsStart}"/>
-                <CheckBox Content="公示期截止前提醒（领房/领回押金死线）" IsChecked="{Binding NotifyClaimDeadline}"/>
+                <CheckBox Content="公示期截止前提醒（中签确认归属死线）" IsChecked="{Binding NotifyClaimDeadline}"/>
+                <CheckBox Content="落选押金返还死线提醒（公示期后 90 天）" IsChecked="{Binding NotifyDepositDeadline}"/>
                 <CheckBox Content="下轮申请期开始提醒" IsChecked="{Binding NotifyNextEntryStart}"/>
 
                 <TextBlock Text="── 常规" Style="{StaticResource H}"/>

@@ -193,6 +193,16 @@ public partial class MainViewModel : ObservableObject
         RefreshHomes();
     }
 
+    [RelayCommand]
+    private void DemolishHome(HomeViewModel item)
+    {
+        // 标记/取消炸房（开始旧家具 35 天保管倒计时）
+        item.Item.DemolishedAt = item.Item.DemolishedAt > 0 ? 0 : DateTimeOffset.Now.ToUnixTimeSeconds();
+        _config.Save();
+        _reminders.Recompute();
+        RefreshHomes();
+    }
+
     private void RefreshAll()
     {
         RefreshWatchList();

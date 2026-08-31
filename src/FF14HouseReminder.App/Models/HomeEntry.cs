@@ -16,6 +16,9 @@ public class HomeEntry
     /// <summary>最后一次进房时间（unix 秒），0=未知</summary>
     public long LastEnteredAt { get; set; }
 
+    /// <summary>炸房（被拆除）时间（unix 秒），0=未炸房。炸房后旧家具由 NPC 保管 35 天</summary>
+    public long DemolishedAt { get; set; }
+
     [JsonIgnore]
     public HouseKey Key => new(Server, Area, Slot, Id);
 
@@ -25,4 +28,8 @@ public class HomeEntry
     /// <summary>45 天拆除死线</summary>
     public DateTimeOffset Deadline =>
         DateTimeOffset.FromUnixTimeSeconds(LastEnteredAt).AddDays(45);
+
+    /// <summary>旧家具保管死线（炸房后 35 天）</summary>
+    public DateTimeOffset FurnitureDeadline =>
+        DateTimeOffset.FromUnixTimeSeconds(DemolishedAt).AddDays(35);
 }

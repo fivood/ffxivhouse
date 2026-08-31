@@ -28,6 +28,7 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         NotifyEntryDeadline = r.NotifyEntryDeadline;
         NotifyResultsStart = r.NotifyResultsStart;
         NotifyClaimDeadline = r.NotifyClaimDeadline;
+        NotifyDepositDeadline = r.NotifyDepositDeadline;
         NotifyNextEntryStart = r.NotifyNextEntryStart;
 
         PollIntervalMinutes = g.PollIntervalMinutes.ToString();
@@ -55,6 +56,7 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
     public bool NotifyEntryDeadline { get; set; }
     public bool NotifyResultsStart { get; set; }
     public bool NotifyClaimDeadline { get; set; }
+    public bool NotifyDepositDeadline { get; set; }
     public bool NotifyNextEntryStart { get; set; }
 
     public string PollIntervalMinutes { get; set; } = "6";
@@ -192,6 +194,7 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         r.NotifyEntryDeadline = NotifyEntryDeadline;
         r.NotifyResultsStart = NotifyResultsStart;
         r.NotifyClaimDeadline = NotifyClaimDeadline;
+        r.NotifyDepositDeadline = NotifyDepositDeadline;
         r.NotifyNextEntryStart = NotifyNextEntryStart;
 
         if (int.TryParse(PollIntervalMinutes, out var minutes))
