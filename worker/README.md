@@ -11,9 +11,11 @@
 Cloudflare 控制台 → **Workers → ff14house-bot → Settings → Builds → Connect to Git**：
 
 1. 连接 GitHub 仓库 `fivood/ffxivhouse`
-2. Root directory 设为 `worker`
-3. Build command 留空，Deploy command 填 `npx wrangler deploy`
-4. 保存后，推送到 main 分支即自动部署
+2. **根目录（Root directory）填 `/worker`** —— 配置文件在 `worker/wrangler.jsonc`，
+   根目录填错会在构建日志里报 `Could not detect a directory containing static files`
+   （wrangler 找不到配置，就退化成部署纯静态站）
+3. 构建命令留空，部署命令 `npx wrangler deploy`（版本命令 `npx wrangler versions upload`）
+4. 生产分支 main，保存后推送到 main 即自动部署
 
 （也可以不走 Git 集成，本地 `npx wrangler deploy` 随时手动发版。）
 
