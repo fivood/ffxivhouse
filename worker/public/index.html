@@ -113,7 +113,9 @@
   .col-side { display: contents; }
   @media (min-width: 900px) {
     body { max-width: 1180px; }
-    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 16px; align-items: start; }
+    /* 上边距要 > 吸顶遮挡条的 10px，否则页头那行说明会被盖住半截 */
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 16px; align-items: start;
+              margin-top: 20px; }
     .col-main { grid-column: 1; grid-row: 1; min-width: 0; }
     .col-side {
       display: flex; flex-direction: column; gap: 14px;
