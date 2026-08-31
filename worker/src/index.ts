@@ -294,7 +294,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 炸房提醒（45 天未进房拆除）：
 /myhome 服务器 房区 区号 房号 [角色名] — 登记我的房产
 　例：/myhome 萌芽池 白银乡 14 43 阿光
-/entered [序号] — 我刚进过这套房，打卡刷新时间
+/entered [序号] [日期] — 进房打卡；带日期=补签（如 /entered 1 8-30）
 /homes — 我的房产与炸房倒计时
 
 数据来源：house.ffxiv.cyou（玩家上报，可能有延迟）`;
@@ -543,27 +543,48 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
         await tgSend(env, chatId, '还没有登记房产，用 /myhome 登记。');
         return;
       }
-      let idx = 0;
-      if (args.length > 0) {
-        const n = parseInt(args[0], 10);
-        if (Number.isNaN(n) || n < 1 || n > homes.length) {
-          await tgSend(env, chatId, `格式：/entered [序号]（1-${homes.length}，序号见 /homes）`);
-          return;
+
+      // 参数解析：数字=序号，日期（8-30 / 2026-08-30 / 8月30日）=补签日期
+      let idx = homes.length === 1 ? 0 : -1;
+      let dateSec = 0; // 0=现在
+      for (const arg of args) {
+        const asNum = parseInt(arg, 10);
+        const dm = arg.match(/^(?:(\d{4})[-/年])?(\d{1,2})[-/月](\d{1,2})日?$/);
+        if (dm) {
+          const nowUtc8 = new Date(Date.now() + 8 * 3600 * 1000);
+          let year = dm[1] ? parseInt(dm[1], 10) : nowUtc8.getUTCFullYear();
+          const month = parseInt(dm[2], 10) - 1;
+          const day = parseInt(dm[3], 10);
+          if (month < 0 || month > 11 || day < 1 || day > 31) {
+            await tgSend(env, chatId, `日期「${arg}」看不懂，格式如 8-30 或 2026-08-30`);
+            return;
+          }
+          let ts = Math.floor((Date.UTC(year, month, day) - 8 * 3600 * 1000) / 1000); // 北京时间当天 00:00
+          if (ts > nowSec) ts = Math.floor((Date.UTC(year - 1, month, day) - 8 * 3600 * 1000) / 1000); // 未来日期视为去年
+          dateSec = ts;
+        } else if (!Number.isNaN(asNum) && idx === -1) {
+          idx = asNum - 1;
         }
-        idx = n - 1;
-      } else if (homes.length > 1) {
+      }
+      if (idx < 0) {
         const list = homes.map((h, i) => `${i + 1}. ${h.label}`).join('\n');
-        await tgSend(env, chatId, `你有多套房产，请指定序号：/entered 序号\n${list}`);
+        await tgSend(env, chatId, `你有多套房产，请指定序号：/entered 序号 [日期]\n${list}`);
         return;
       }
-      homes[idx].lastEnteredAt = Math.floor(Date.now() / 1000);
+      if (idx >= homes.length) {
+        await tgSend(env, chatId, `序号超出范围（1-${homes.length}）。`);
+        return;
+      }
+
+      homes[idx].lastEnteredAt = dateSec > 0 ? dateSec : nowSec;
       homes[idx].fired = [];
       await saveSub(env, sub);
       const h = homes[idx];
       const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
+      const when = dateSec > 0 ? `（补签至 ${fmtTime(dateSec).slice(0, 5)}）` : '';
       await tgSend(env, chatId,
-        `✅ 已打卡：${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）\n` +
-        `炸房倒计时已重置为 ${DEMOLITION_DAYS} 天。`);
+        `✅ 已打卡${when}：${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）\n` +
+        `炸房倒计时重置为 ${DEMOLITION_DAYS} 天（至 ${fmtTime(homes[idx].lastEnteredAt + DEMOLITION_DAYS * 86400).slice(0, 5)}）。`);
       return;
     }
 
@@ -926,14 +947,25 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/entered' && request.method === 'POST') {
-    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number; date?: string };
     const chatId = await checkAuthBody(env, body);
     if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
     const sub = await getSub(env, chatId);
     const home = (sub.homes ?? []).find(h =>
       h.server === body.server && h.area === body.area && h.slot === body.slot && h.id === body.id);
     if (!home) return json({ error: '未找到该房产' }, 404);
-    home.lastEnteredAt = Math.floor(Date.now() / 1000);
+
+    // 可选补签日期（YYYY-MM-DD），按北京时间当天 00:00 起算（保守，提醒偏早不偏晚）
+    if (body.date) {
+      const dm = body.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!dm) return json({ error: '日期格式应为 YYYY-MM-DD' }, 400);
+      const ts = Math.floor((Date.UTC(+dm[1], +dm[2] - 1, +dm[3]) - 8 * 3600 * 1000) / 1000);
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (ts > nowSec) return json({ error: '不能填未来的日期' }, 400);
+      home.lastEnteredAt = ts;
+    } else {
+      home.lastEnteredAt = Math.floor(Date.now() / 1000);
+    }
     home.fired = [];
     await saveSub(env, sub);
     return json({ ok: true });
