@@ -269,17 +269,29 @@ async function tgAnswerCallback(env: Env, callbackId: string, text: string): Pro
 
 /** WxPusher 极简推送（SPT，用户自助扫码获取，微信渠道） */
 /** Bark（iOS）。填 device key 走官方服务器，填完整 URL 则用自建的 */
-async function barkSend(env: Env, keyOrUrl: string, title: string, body: string): Promise<void> {
+async function barkSend(env: Env, keyOrUrl: string, title: string, body: string): Promise<{ ok: boolean; msg: string }> {
   const base = /^https?:\/\//i.test(keyOrUrl)
     ? keyOrUrl.replace(/\/+$/, '')
     : `https://api.day.app/${encodeURIComponent(keyOrUrl)}`;
-  const resp = await fetch(base, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
-    // group 让同类提醒在通知中心折叠到一起
-    body: JSON.stringify({ title, body, group: '抽房了吗' }),
-  });
-  if (!resp.ok) console.error(`barkSend 失败 ${resp.status}: ${await resp.text()}`);
+  try {
+    const resp = await fetch(base, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+      // group 让同类提醒在通知中心折叠到一起
+      body: JSON.stringify({ title, body, group: '抽房了吗' }),
+    });
+    const text = await resp.text();
+    // Bark 对不存在的 key 也返回 200 外壳里的 code:400，得看 body
+    let code = resp.status;
+    try { code = JSON.parse(text).code ?? resp.status; } catch { /* 非 JSON 就看 HTTP 状态 */ }
+    if (!resp.ok || code !== 200) {
+      console.error(`barkSend 失败 ${resp.status}: ${text}`);
+      return { ok: false, msg: text.slice(0, 200) };
+    }
+    return { ok: true, msg: '' };
+  } catch (e) {
+    return { ok: false, msg: String(e).slice(0, 200) };
+  }
 }
 
 async function wxSend(env: Env, spt: string, title: string, body: string): Promise<void> {
@@ -502,10 +514,16 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
           : 'key 格式不对：应是一串字母数字，或自建服务器带 key 的完整地址。');
         return;
       }
-      sub2.barkKey = /^https?:\/\//i.test(raw) ? raw.replace(/\/+$/, '') : raw;
+      const candidate = isUrl ? raw.replace(/\/+$/, '') : raw;
+      const r = await barkSend(env, candidate, '抽房了吗', 'Bark 推送已开启，这是一条测试。');
+      if (!r.ok) {
+        await tgSend(env, chatId, `推送没成功，key 可能填错了（设备 token 不是 key）：
+${r.msg}`);
+        return;
+      }
+      sub2.barkKey = candidate;
       await saveSub(env, sub2);
-      await barkSend(env, sub2.barkKey, '抽房了吗', 'Bark 推送已开启，这是一条测试。');
-      await tgSend(env, chatId, '已开启 Bark 推送，刚给你发了一条测试，收到就是通了。');
+      await tgSend(env, chatId, '已开启 Bark 推送，刚给你手机发了一条测试。');
       return;
     }
 
@@ -1371,7 +1389,14 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       return json({ error: 'Bark key 格式不对（应是一串字母数字，或自建服务器带 key 的完整地址）' }, 400);
     }
     const sub2 = await getSub(env, chatId);
-    if (key) sub2.barkKey = key; else delete sub2.barkKey;
+    if (key) {
+      // 先试着推一条，通了才存——设备 token 和 key 长得都像，填错了只会静默失败
+      const r = await barkSend(env, key, '抽房了吗', 'Bark 推送已开启，这是一条测试。');
+      if (!r.ok) return json({ error: `Bark 推送不通，key 可能填错了：${r.msg}` }, 400);
+      sub2.barkKey = key;
+    } else {
+      delete sub2.barkKey;
+    }
     await saveSub(env, sub2);
     return json({ ok: true, barkKey: sub2.barkKey ?? '' });
   }
