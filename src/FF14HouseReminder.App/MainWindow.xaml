@@ -205,11 +205,8 @@
                 <RowDefinition Height="Auto"/>            <!-- 状态栏 -->
             </Grid.RowDefinitions>
 
-            <!-- 标题栏 -->
+            <!-- 顶部按钮栏（标题在窗口标题栏里已经有了，这儿不再重复，省出宽度给按钮） -->
             <DockPanel Grid.Row="0" Margin="0,0,0,9">
-                <TextBlock DockPanel.Dock="Left" VerticalAlignment="Bottom">
-                    <Run Text="抽房了吗" FontSize="20" FontWeight="Bold" Foreground="#55554A"/><Run Text=" FF14" FontSize="12" FontWeight="Bold" Foreground="#8B8B5E"/>
-                </TextBlock>
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
                     <Button Content="{Binding UpdateText}" Style="{StaticResource RetroBtn}"
                             Background="#F6E8C8" BorderBrush="#B06030" FontWeight="Bold"
