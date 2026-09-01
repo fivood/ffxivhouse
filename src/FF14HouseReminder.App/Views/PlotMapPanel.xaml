@@ -1,0 +1,34 @@
+<UserControl x:Class="FF14HouseReminder.Views.PlotMapPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="382" Background="#D8D8CF"
+             FontFamily="Tahoma, Microsoft YaHei UI" FontSize="12">
+    <Border BorderBrush="#ABABA0" BorderThickness="1,0,0,0">
+        <DockPanel Margin="10">
+
+            <DockPanel DockPanel.Dock="Top">
+                <TextBlock Text="⊙  房区图" FontWeight="Bold" Foreground="#55554A"
+                           FontSize="14" VerticalAlignment="Center"/>
+                <Button DockPanel.Dock="Right" HorizontalAlignment="Right" Content="✕ 关闭"
+                        Background="#F2F2EB" Foreground="#3F3F38" BorderBrush="#ABABA0"
+                        BorderThickness="1" Padding="10,4" Click="Close_Click"/>
+            </DockPanel>
+
+            <WrapPanel DockPanel.Dock="Top" Margin="0,8,0,6">
+                <ComboBox x:Name="AreaBox" Width="112" Margin="0,0,4,0" SelectionChanged="Selection_Changed"/>
+                <ComboBox x:Name="HalfBox" Width="120" SelectionChanged="Selection_Changed"/>
+            </WrapPanel>
+
+            <TextBlock DockPanel.Dock="Bottom" Margin="0,7,0,0" FontSize="11" Foreground="#8A8A80"
+                       TextWrapping="Wrap"
+                       Text="鼠标滑过房屋列表（或图上地块）高亮对应地块。上方为北，同一房区各小区布局相同。"/>
+
+            <Border BorderBrush="#ABABA0" BorderThickness="1" Background="#F7F7F0">
+                <Viewbox Stretch="Uniform">
+                    <Canvas x:Name="MapCanvas" ClipToBounds="True"/>
+                </Viewbox>
+            </Border>
+
+        </DockPanel>
+    </Border>
+</UserControl>

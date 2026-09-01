@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using FF14HouseReminder.ViewModels;
 
@@ -7,7 +8,7 @@ namespace FF14HouseReminder;
 public partial class MainWindow : Window
 {
     private const double CollapsedWidth = 400;
-    private const double SettingsPanelWidth = 390;
+    private const double SidePanelWidth = 390;
 
     private readonly DispatcherTimer _ticker;
     private readonly MainViewModel _vm;
@@ -25,10 +26,20 @@ public partial class MainWindow : Window
 
         _vm.PropertyChanged += (_, e) =>
         {
+            // 设置和房区图共用右侧那块地方，开一个就关掉另一个
             if (e.PropertyName == nameof(MainViewModel.ShowSettings))
-                UpdateSettingsPanel(_vm.ShowSettings);
+            {
+                if (_vm.ShowSettings) _vm.ShowMap = false;
+                UpdateSidePanel();
+            }
+            else if (e.PropertyName == nameof(MainViewModel.ShowMap))
+            {
+                if (_vm.ShowMap) _vm.ShowSettings = false;
+                UpdateSidePanel();
+            }
         };
         SettingsPanelControl.RequestClose += () => _vm.ShowSettings = false;
+        PlotMapPanelControl.RequestClose += () => _vm.ShowMap = false;
 
         _ticker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _ticker.Tick += (_, _) => _vm.Tick();
@@ -37,13 +48,16 @@ public partial class MainWindow : Window
 
     private double _restoreLeft;
 
-    private void UpdateSettingsPanel(bool open)
+    private void UpdateSidePanel()
     {
+        var open = _vm.ShowSettings || _vm.ShowMap;
+        SettingsPanelControl.Visibility = _vm.ShowSettings ? Visibility.Visible : Visibility.Collapsed;
+        PlotMapPanelControl.Visibility = _vm.ShowMap ? Visibility.Visible : Visibility.Collapsed;
+
         if (open)
         {
-            _restoreLeft = Left;
-            SettingsPanelControl.Visibility = Visibility.Visible;
-            Width = CollapsedWidth + SettingsPanelWidth;
+            if (Width <= CollapsedWidth) _restoreLeft = Left;   // 两个面板互切时别把还原位置覆盖掉
+            Width = CollapsedWidth + SidePanelWidth;
             // 以左边缘为原点向右展开；超出工作区右缘才左移
             var overflow = Left + Width - SystemParameters.WorkArea.Right;
             if (overflow > 0)
@@ -51,10 +65,23 @@ public partial class MainWindow : Window
         }
         else
         {
-            SettingsPanelControl.Visibility = Visibility.Collapsed;
             Width = CollapsedWidth;
             Left = _restoreLeft;
         }
+    }
+
+    /// <summary>滑过关注 / 在售 / 我的房产任一条目，就在房区图上高亮那块地</summary>
+    private void Item_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (!_vm.ShowMap || sender is not FrameworkElement { DataContext: { } data }) return;
+        var plot = data switch
+        {
+            HouseItemViewModel h => (h.Snapshot.Data.Area, h.Snapshot.Data.ID),
+            WatchViewModel w => (w.Item.Area, w.Item.Id),
+            HomeViewModel m => (m.Item.Area, m.Item.Id),
+            _ => (-1, -1)
+        };
+        if (plot.Item1 >= 0) PlotMapPanelControl.Highlight(plot.Item1, plot.Item2);
     }
 
     private void HomesStrip_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) =>

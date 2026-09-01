@@ -139,6 +139,21 @@
     #salesList .item:nth-last-child(2):nth-child(odd) { border-bottom: none; }
     #salesList .empty { grid-column: 1 / -1; }
   }
+  /* 房区图（常显，不弹窗不移动） */
+  #mapSection .strip { gap: 6px; }
+  #mapSection .strip select { margin: 0; font-size: 12px; padding: 3px 2px; }
+  #mapBox { line-height: 0; }
+  #mapBox svg { display: block; width: 100%; height: auto; background: #F7F7F0; }
+  #mapBox .plot { fill: rgba(0,0,0,0); stroke: #7A7A6C; stroke-width: 1; stroke-dasharray: 4 4; }
+  #mapBox .plot:hover { fill: rgba(45,140,157,.22); }
+  #mapBox .plot.on { fill: rgba(45,140,157,.42); stroke: #14545e; stroke-width: 4; stroke-dasharray: none; }
+  #mapBox .plot-no { font-size: 13px; text-anchor: middle; font-weight: bold; pointer-events: none;
+                     fill: #3F3F38; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+  #mapHint { padding: 6px 10px; font-size: 12px; color: var(--dim); line-height: 1.5; }
+  /* 窄屏没有悬停，地图别把首屏占满 */
+  @media (max-width: 899px) {
+    #mapBox svg { max-height: 46vh; width: auto; max-width: 100%; margin: 0 auto; }
+  }
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
     background: #55554A; color: #fff; padding: 10px 18px; font-size: 13px;
@@ -165,6 +180,26 @@
 <div class="layout">
 <!-- ══ 侧栏：绑定 / 我的关注 / 我的房产 / 推送设置 ══ -->
 <aside class="col-side">
+
+<!-- 房区图（常显） -->
+<div id="mapSection">
+  <div class="strip"><span>⊙ 房区图</span>
+    <span>
+      <select id="mapArea" onchange="drawMap()">
+        <option value="0">海雾村</option><option value="1">薰衣草苗圃</option>
+        <option value="2">高脚孤丘</option><option value="3">白银乡</option>
+        <option value="4">穹顶皓天</option>
+      </select>
+      <select id="mapHalf" onchange="drawMap()">
+        <option value="0">主城区 1-30</option><option value="1">扩展区 31-60</option>
+      </select>
+    </span>
+  </div>
+  <div class="panel">
+    <div id="mapBox"></div>
+    <div id="mapHint">鼠标滑过房屋卡片（或图上地块）高亮对应地块。上方为北，同一房区各小区布局相同。</div>
+  </div>
+</div>
 
 <!-- 未绑定提示 -->
 <div id="bindPanel" style="display:none">
@@ -433,7 +468,7 @@ function renderWatch() {
     const state = `<span class="state" style="color:${STATE_COLOR[w.state]}">${w.stateName}</span>` +
       (w.estimated ? ' <span class="est">（推测）</span>' : '');
     const cd = w.phaseEnd ? ` <span class="countdown" style="color:${URGENCY(w.phaseEnd)}">${fmtRemain(w.phaseEnd)}</span>` : '';
-    return `<div class="item">
+    return `<div class="item" onmouseenter="hoverPlot('${watchKey(w)}')">
       <div class="row"><span class="title">${w.serverName} ${w.areaName} ${w.slotNo}区 ${w.id}号 [${w.size}]</span>
         <span class="card-actions">
           ${w.state === 1
@@ -477,7 +512,7 @@ function renderSales() {
     const isW = watched.has(key);
     const state = `<span class="state" style="color:${STATE_COLOR[h.state]}">${h.stateName}</span>` +
       (h.estimated ? ' <span class="est">（推测）</span>' : '');
-    return `<div class="item sales-item" onclick="cardWatch(event,'${key}')">
+    return `<div class="item sales-item" onclick="cardWatch(event,'${key}')" onmouseenter="hoverPlot('${key}')">
       <div class="row"><span class="title">${h.areaName} ${h.slotNo}区 ${h.id}号 [${h.size}]</span>
         <button class="watch-btn" ${isW ? 'disabled' : ''} onclick="watch('${key}')">${ico(isW ? 'check' : 'plus')}${isW ? '已关注' : '关注'}</button></div>
       <div><span class="price">${h.price.toLocaleString()} 金币</span>
@@ -511,7 +546,7 @@ function renderHomes() {
         status = `<span style="color:${color};font-weight:bold">${mark} 剩余 ${d} 天</span>` +
           ` <span class="meta">最后进屋 ${fmtDate(h.lastEnteredAt)}</span>`;
       }
-    return `<div class="item">
+    return `<div class="item" onmouseenter="hoverPlot('${key}')">
       <div class="row"><span class="title">${h.serverName} ${h.areaName} ${h.slotNo}区 ${h.id}号 <span class="meta">${h.label}</span></span></div>
       <div>${status}</div>
       <div class="home-actions">
@@ -663,7 +698,57 @@ async function saveWxUid() {
   }
 }
 
+// ── 房区图 ──
+// 地块位置：游戏世界坐标 x,z 与半边长 w（取整）。同一房区各小区布局相同；
+// 1-30 号在主城区、31-60 号在扩展区。数据来源：艾欧泽亚售楼中心前端。
+// 底图 /maps/{房区}-0.jpg 是 2048px 整图，像素 = 世界坐标 × 2 + 1024，
+// 所以在世界坐标系里它正好落在 (-512,-512)~(512,512)。扩展区不用单独出图：
+// 实测它就是主城区顺时针转 90° 再平移 (-704,-704)，五个房区都一样，残差 < 1 格。
+const AREA_NAMES = ['海雾村', '薰衣草苗圃', '高脚孤丘', '白银乡', '穹顶皓天'];
+const PLOT_XZW = [
+  '-72,-108,16|-144,-100,20|-96,-60,12|-92,-12,16|-148,28,24|-36,-4,16|-40,-56,16|-12,-92,12|40,-100,12|64,-124,12|4,-56,12|48,-60,12|64,-32,12|84,-63,16|148,-104,24|136,-34,12|112,-20,12|72,4,12|42,24,12|66,36,12|88,52,12|120,56,12|112,28,12|150,-6,12|162,24,12|168,56,12|186,-6,12|196,24,12|196,64,16|140,100,16|-596,-776,16|-604,-848,20|-644,-800,12|-692,-796,16|-732,-852,24|-700,-740,16|-648,-744,16|-612,-716,12|-604,-664,12|-580,-640,12|-648,-700,12|-644,-656,12|-672,-640,12|-641,-620,16|-600,-556,24|-670,-568,12|-684,-592,12|-708,-632,12|-728,-662,12|-740,-638,12|-756,-616,12|-760,-584,12|-732,-592,12|-698,-554,12|-728,-542,12|-760,-536,12|-698,-518,12|-728,-508,12|-768,-508,16|-804,-564,16',
+  '144,-78,16|78,-100,12|130,-163,20|40,-81,12|72,-30,16|143,2,20|116,52,12|85,64,12|125,95,12|74,94,12|52,132,16|64,22,12|28,13,12|32,44,12|12,82,12|-92,98,16|-30,78,12|-31,44,12|-82,46,12|-8,1,12|-58,-3,16|-37,-36,12|-66,-36,12|-46,-66,12|-4,-73,12|-29,-106,12|-114,-40,16|-136,-108,20|-105,-154,12|-50,-150,16|-626,-560,16|-604,-626,12|-541,-574,20|-623,-664,12|-674,-632,16|-706,-561,20|-756,-588,12|-768,-619,12|-799,-579,12|-798,-630,12|-836,-652,16|-726,-640,12|-717,-676,12|-748,-672,12|-786,-692,12|-802,-796,16|-782,-734,12|-748,-735,12|-750,-786,12|-705,-712,12|-701,-762,16|-668,-741,12|-668,-770,12|-638,-750,12|-631,-708,12|-598,-733,12|-664,-818,16|-596,-840,20|-550,-809,12|-554,-754,16',
+  '-38,-110,12|-64,-98,12|-86,-80,12|-82,-121,16|-119,-92,20|-40,-64,16|-73,-40,12|-118,-23,16|-140,-51,12|-148,-25,12|-159,19,16|-116,24,16|-72,12,20|-32,18,12|-14,-36,12|68,-40,12|67,0,12|73,29,12|44,54,16|0,80,12|94,-70,12|106,-36,12|130,-57,12|144,-32,12|124,4,16|120,40,12|130,72,12|96,59,12|184,24,12|188,60,20|-594,-742,12|-606,-768,12|-624,-790,12|-583,-786,16|-612,-823,20|-640,-744,16|-664,-777,12|-681,-822,16|-653,-844,12|-679,-852,12|-723,-863,16|-728,-820,16|-716,-776,20|-722,-736,12|-668,-718,12|-664,-636,12|-704,-637,12|-733,-631,12|-758,-660,16|-784,-704,12|-634,-610,12|-668,-598,12|-647,-574,12|-672,-560,12|-708,-580,16|-744,-584,12|-776,-574,12|-763,-608,12|-728,-520,12|-764,-516,20',
+  '-34,116,16|-27,75,12|5,125,12|7,79,12|40,63,12|45,99,12|50,144,20|115,130,16|90,93,12|118,70,12|89,47,12|58,22,12|68,-18,16|105,6,12|131,32,16|136,-30,24|-105,74,12|-88,39,12|-135,50,16|-107,12,12|-164,22,12|-167,-11,12|-151,-50,12|-123,-26,16|-80,-14,12|-97,-56,12|-59,-55,12|-75,-117,16|-116,-93,12|-159,-122,24|-820,-738,16|-779,-732,12|-829,-700,12|-783,-697,12|-767,-664,12|-803,-660,12|-848,-655,20|-835,-590,16|-798,-614,12|-775,-586,12|-751,-615,12|-726,-646,12|-687,-636,16|-711,-599,12|-737,-573,16|-675,-568,24|-778,-809,12|-743,-792,12|-754,-839,16|-716,-811,12|-726,-868,12|-693,-871,12|-654,-855,12|-678,-827,16|-690,-784,12|-648,-801,12|-649,-763,12|-587,-779,16|-611,-820,12|-582,-863,24',
+  '90,177,12|144,129,16|79,109,12|101,78,12|179,85,12|184,44,12|117,42,16|-36,86,16|4,59,12|-23,36,12|-71,135,12|-114,78,24|-81,42,12|-23,-36,12|-9,-80,12|-41,-94,12|-86,-43,16|-116,-85,16|-46,-146,12|-77,-147,12|-72,-190,16|-140,-136,24|114,-37,12|131,-61,12|88,-88,12|185,-54,16|151,-100,12|44,-135,12|52,-176,12|93,-178,20|-881,-614,12|-833,-560,16|-813,-625,12|-782,-603,12|-789,-525,12|-748,-520,12|-746,-587,16|-790,-740,16|-763,-700,12|-740,-727,12|-839,-775,12|-782,-818,24|-746,-785,12|-668,-727,12|-624,-713,12|-610,-745,12|-661,-790,16|-619,-820,16|-558,-750,12|-557,-781,12|-514,-776,16|-568,-844,20|-667,-590,12|-643,-573,12|-616,-616,12|-650,-519,16|-604,-553,12|-569,-660,12|-528,-652,12|-526,-611,24'
+].map(a => a.split('|').map(p => p.split(',').map(Number)));
+const SIZE_OF = w => w < 14 ? 'S' : w < 18 ? 'M' : 'L';
+let mapKey = '', mapHit = 0;
+
+function drawMap(hitId) {
+  const area = +$('mapArea').value, half = +$('mapHalf').value, key = area + ':' + half;
+  if (key !== mapKey) {
+    mapKey = key;
+    const list = PLOT_XZW[area].slice(half * 30, half * 30 + 30);
+    const xs = list.map(p => p[0]), zs = list.map(p => p[1]), pad = 26;
+    const x0 = Math.min(...xs) - pad, z0 = Math.min(...zs) - pad;
+    const vw = Math.max(...xs) + pad - x0, vh = Math.max(...zs) + pad - z0;
+    const cells = list.map(([x, z, r], i) => {
+      const no = half * 30 + i + 1;
+      return `<rect class="plot" data-no="${no}" x="${x - r}" y="${z - r}"` +
+        ` width="${2 * r}" height="${2 * r}"><title>${no}号 [${SIZE_OF(r)}]</title></rect>` +
+        `<text class="plot-no" x="${x}" y="${z + 5}">${no}</text>`;
+    }).join('');
+    // 扩展区没有单独的图：主城区那张顺时针转 90° 再平移即可
+    $('mapBox').innerHTML = `<svg viewBox="${x0} ${z0} ${vw} ${vh}">` +
+      `<image x="-512" y="-512" width="1024" height="1024" href="/maps/${area}-0.jpg"` +
+      `${half ? ' transform="translate(-704,-704) rotate(90)"' : ''}/>${cells}</svg>`;
+  }
+  if (hitId) mapHit = hitId;
+  $('mapBox').querySelectorAll('.plot').forEach(el =>
+    el.classList.toggle('on', +el.dataset.no === mapHit));
+}
+
+// 滑过房屋卡片：把地图切到那套房所在的图并高亮它
+function hoverPlot(key) {
+  const { area, id } = parseKey(key);
+  $('mapArea').value = area;
+  $('mapHalf').value = id > 30 ? 1 : 0;
+  drawMap(id);
+}
+
 // ── 启动 ──
+drawMap();
 loadCred();
 loadServers().then(() => { restoreUi(); loadSales(); });
 loadWatch();

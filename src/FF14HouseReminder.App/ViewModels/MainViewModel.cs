@@ -39,6 +39,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _updateText = "";
     [ObservableProperty] private bool _hasUpdate;
     [ObservableProperty] private bool _showSettings;
+    [ObservableProperty] private bool _showMap;
 
     // 空列表提示
     [ObservableProperty] private bool _watchEmpty = true;
@@ -396,6 +397,9 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void ToggleSettings() => ShowSettings = !ShowSettings;
+
+    [RelayCommand]
+    private void ToggleMap() => ShowMap = !ShowMap;
 
     [RelayCommand]
     private void OpenWebsite()

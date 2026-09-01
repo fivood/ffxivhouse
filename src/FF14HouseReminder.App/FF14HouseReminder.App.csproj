@@ -8,8 +8,8 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>FF14HouseReminder</AssemblyName>
     <RootNamespace>FF14HouseReminder</RootNamespace>
-    <Version>0.3.1</Version>
-    <AssemblyInformationalVersion>0.3.1</AssemblyInformationalVersion>
+    <Version>0.4.0</Version>
+    <AssemblyInformationalVersion>0.4.0</AssemblyInformationalVersion>
     <Description>抽房了吗 - FF14 房屋抽签时间提醒</Description>
     <Product>抽房了吗</Product>
     <ApplicationIcon>Resources\house.ico</ApplicationIcon>
@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <Resource Include="Resources\house.ico" />
+    <!-- 房区底图：和网页版共用 worker/public/maps 里那一份，不在这边复制 -->
+    <Resource Include="..\..\worker\public\maps\*.jpg" Link="Resources\maps\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

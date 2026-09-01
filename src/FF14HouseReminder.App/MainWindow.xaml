@@ -63,6 +63,8 @@
 
         <!-- 列表项：统一留白 -->
         <Style TargetType="ListBoxItem" x:Key="RoomyItem">
+            <!-- 滑过任一房屋条目就在房区图上高亮它 -->
+            <EventSetter Event="MouseEnter" Handler="Item_MouseEnter"/>
             <Setter Property="Padding" Value="6,7"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
             <Setter Property="BorderBrush" Value="#E3E3DA"/>
@@ -353,6 +355,19 @@
                         <ComboBoxItem Content="部队"/>
                         <ComboBoxItem Content="个人"/>
                     </ComboBox>
+                    <Button Content="🗺 房区图" ToolTip="打开房区图，滑过房屋条目会高亮对应地块"
+                            Command="{Binding ToggleMapCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource RetroBtn}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowMap}" Value="True">
+                                        <Setter Property="Background" Value="#8B8B5E"/>
+                                        <Setter Property="Foreground" Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </WrapPanel>
 
                 <ListBox Grid.Row="2" ItemsSource="{Binding SalesList}" Style="{StaticResource WhiteList}"
@@ -416,7 +431,8 @@
             </Border>
         </Grid>
 
-        <!-- ══ 右侧设置面板（展开式） ══ -->
+        <!-- ══ 右侧展开面板：设置 / 房区图，同时只开一个 ══ -->
         <views:SettingsPanel x:Name="SettingsPanelControl" Grid.Column="1" Visibility="Collapsed"/>
+        <views:PlotMapPanel x:Name="PlotMapPanelControl" Grid.Column="1" Visibility="Collapsed"/>
     </Grid>
 </Window>
