@@ -121,7 +121,7 @@ public partial class HomeViewModel : ObservableObject
     public string DemolishText => Item.DemolishedAt > 0 ? "↺" : "💥";
     public string DemolishTip => Item.DemolishedAt > 0
         ? "房子还在？取消炸房标记"
-        : "房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算";
+        : "房子被拆了？开始 35 天资产回收倒计时（家具庭具 + 购地金币 80%）；选了日期就按那天起算";
     /// <summary>打过卡（已进屋按钮上色）</summary>
     public bool HasEntered => Item.DemolishedAt <= 0 && Item.LastEnteredAt > 0;
     /// <summary>没炸房时才显示打卡/补签</summary>
@@ -130,14 +130,14 @@ public partial class HomeViewModel : ObservableObject
 
     public void Refresh(DateTimeOffset now)
     {
-        // 已炸房：显示旧家具保管倒计时
+        // 已炸房：显示资产回收倒计时
         if (Item.DemolishedAt > 0)
         {
             var fRemain = Item.FurnitureDeadline - now;
             var fDays = (int)Math.Floor(fRemain.TotalDays);
             StatusText = fDays >= 0
-                ? $"💥 已炸房，旧家具保管还剩 {fDays} 天（{Item.FurnitureDeadline.LocalDateTime:MM-dd} 到期）"
-                : "💥 已炸房，旧家具保管已到期！";
+                ? $"💥 已炸房，资产回收还剩 {fDays} 天（{Item.FurnitureDeadline.LocalDateTime:MM-dd} 到期）"
+                : "💥 已炸房，资产回收已到期！";
             StatusColor = fDays <= 1 ? "#B03030" : fDays <= 5 ? "#B06030" : "#7B5EA7";
             NotifyDemolishState();
             return;

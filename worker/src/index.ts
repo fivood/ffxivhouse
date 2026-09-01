@@ -322,6 +322,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /mode 序号 — 切换 计划抽/已报名
 /unwatch 序号 — 取消关注
 /lead 24,1 — 截止前提醒提前量（小时，逗号分隔）
+/notify — 五类提醒的开关（/notify 序号 切换）
 /name 名字 — 设置网页版显示的昵称
 /servers — 服务器列表
 /help — 本帮助
@@ -507,6 +508,29 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
       sub.leadHours = [...new Set(hours)].sort((a, b) => b - a);
       await saveSub(env, sub);
       await tgSend(env, chatId, `提前量已设为 ${sub.leadHours.join(',')} 小时。`);
+      return;
+    }
+
+    case '/notify': {
+      const sub = await getSub(env, chatId);
+      const flags = sub.notify ?? NOTIFY_ALL;
+      const keys: (keyof NotifyFlags)[] = ['entry', 'results', 'claim', 'deposit', 'next'];
+      const labels = ['报名截止（申请期结束前）', '开奖（进入公示期）',
+        '确认归属死线（公示期结束前，逾期扣 50%）',
+        '抽签金返还死线（公示期后 90 天，要点门牌）', '下轮开抽（新申请期开始）'];
+      const n = parseInt(args[0] ?? '', 10);
+      if (!Number.isNaN(n) && n >= 1 && n <= keys.length) {
+        const key = keys[n - 1];
+        const next = { ...flags, [key]: !flags[key] };
+        sub.notify = next;
+        await saveSub(env, sub);
+        await tgSend(env, chatId, `已${next[key] ? '开启' : '关闭'}：${labels[n - 1]}`);
+        return;
+      }
+      await tgSend(env, chatId,
+        '提醒开关（发 /notify 序号 切换）：\n' +
+        keys.map((k, i) => `${i + 1}. ${flags[k] ? '✅' : '❌'} ${labels[i]}`).join('\n') +
+        '\n\n' + `提前量：${sub.leadHours.join(',')} 小时（/lead 修改）`);
       return;
     }
 
