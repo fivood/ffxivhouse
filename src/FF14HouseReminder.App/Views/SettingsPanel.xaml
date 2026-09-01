@@ -73,8 +73,8 @@
                 </DockPanel>
 
                 <CheckBox Content="Bark 推送（iOS）" IsChecked="{Binding BarkEnabled}"/>
-                <TextBlock Text="设备 key：" ToolTip="获取方法：&#x0a;1. App Store 装 Bark（iOS）&#x0a;2. 打开 App，复制那串 key 或整条推送地址&#x0a;3. 粘到这里，不用注册账号&#x0a;自建服务器就填完整地址"/>
-                <TextBox Text="{Binding BarkKey}" ToolTip="获取方法：&#x0a;1. App Store 装 Bark（iOS）&#x0a;2. 打开 App，复制那串 key 或整条推送地址&#x0a;3. 粘到这里，不用注册账号&#x0a;自建服务器就填完整地址"/>
+                <TextBlock Text="设备 key：" ToolTip="获取方法：&#x0a;1. App Store 装 Bark（iOS）&#x0a;2. 打开 App，复制那串 key 或整条推送地址&#x0a;3. 粘到这里，不用注册账号&#x0a;自建 bark-server 就填带 key 的完整地址，例 https://你的域名/AbCd1234"/>
+                <TextBox Text="{Binding BarkKey}" ToolTip="获取方法：&#x0a;1. App Store 装 Bark（iOS）&#x0a;2. 打开 App，复制那串 key 或整条推送地址&#x0a;3. 粘到这里，不用注册账号&#x0a;自建 bark-server 就填带 key 的完整地址，例 https://你的域名/AbCd1234"/>
 
                 <CheckBox Content="WxPusher 推送（微信）" IsChecked="{Binding WxPusherEnabled}"/>
                 <TextBlock Text="AppToken：" ToolTip="获取方法：&#x0a;1. 浏览器打开 wxpusher.zjiecode.com，微信扫码登录&#x0a;2. 应用管理 → 创建应用&#x0a;3. 复制 appToken（AT_ 开头）填到这里"/>

@@ -491,9 +491,15 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
         await tgSend(env, chatId, '已关闭 Bark 推送。');
         return;
       }
-      const ok = /^https?:\/\//i.test(raw) || /^[A-Za-z0-9_-]{6,64}$/.test(raw);
-      if (!ok) {
-        await tgSend(env, chatId, 'key 格式不对：应是一串字母数字，或自建服务器的完整地址。');
+      const isUrl = /^https?:\/\//i.test(raw);
+      let urlPath = '';
+      if (isUrl) {
+        try { urlPath = new URL(raw).pathname.replace(/^\/+|\/+$/g, ''); } catch { urlPath = ''; }
+      }
+      if (isUrl ? !urlPath : !/^[A-Za-z0-9_-]{6,64}$/.test(raw)) {
+        await tgSend(env, chatId, isUrl
+          ? '自建服务器地址要带上 key，例：https://你的域名/AbCd1234'
+          : 'key 格式不对：应是一串字母数字，或自建服务器带 key 的完整地址。');
         return;
       }
       sub2.barkKey = /^https?:\/\//i.test(raw) ? raw.replace(/\/+$/, '') : raw;
@@ -1352,10 +1358,17 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const chatId = await checkAuthBody(env, body);
     if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
     let key = (body.key ?? '').trim();
-    // 允许直接粘 Bark App 里那条完整推送地址，自动剥成 key / 自建服务器地址
-    if (/^https?:\/\//i.test(key)) key = key.replace(/\/+$/, '');
-    else if (key && !/^[A-Za-z0-9_-]{6,64}$/.test(key)) {
-      return json({ error: 'Bark key 格式不对（应是一串字母数字，或自建服务器的完整地址）' }, 400);
+    // 允许直接粘 Bark App 里那条完整推送地址（自建服务器就是这么用的）
+    if (/^https?:\/\//i.test(key)) {
+      key = key.replace(/\/+$/, '');
+      // 自建地址必须带上 key 那一段，只给域名会 POST 到根路径、静默失败
+      let path = '';
+      try { path = new URL(key).pathname.replace(/^\/+|\/+$/g, ''); } catch { path = ''; }
+      if (!path) {
+        return json({ error: '自建服务器地址要带上 key，例：https://你的域名/AbCd1234' }, 400);
+      }
+    } else if (key && !/^[A-Za-z0-9_-]{6,64}$/.test(key)) {
+      return json({ error: 'Bark key 格式不对（应是一串字母数字，或自建服务器带 key 的完整地址）' }, 400);
     }
     const sub2 = await getSub(env, chatId);
     if (key) sub2.barkKey = key; else delete sub2.barkKey;

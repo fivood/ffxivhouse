@@ -326,9 +326,10 @@
     </button>
     <div id="barkSection" style="display:none">
       <span class="meta">iOS 上最省事的一条通道：装 <a href="https://apps.apple.com/app/bark-customed-notifications/id1403753865" target="_blank">Bark</a>，
-      打开 App 复制那串 key（或整条推送地址）粘进来即可，不用注册账号。自建服务器就直接填完整地址。</span>
+      打开 App 复制那串 key（或整条推送地址）粘进来即可，不用注册账号。<br>
+      自建了 bark-server 就填<b>带 key 的完整地址</b>，例 <code>https://你的域名/AbCd1234</code>（只填域名会推不出去）。</span>
       <div class="row" style="margin-top:6px">
-        <input type="text" id="barkInput" placeholder="设备 key 或完整地址，留空则关闭" style="flex:1">
+        <input type="text" id="barkInput" placeholder="设备 key，或自建的 https://域名/key，留空则关闭" style="flex:1">
         <button onclick="saveBark()" class="icon-btn" title="保存 Bark 推送设置">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         </button>
