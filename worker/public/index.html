@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>抽房了吗 - FF14 房屋抽签提醒</title>
 <link rel="icon" href="/favicon.ico" type="image/x-icon">
+<!-- Telegram Mini App：从 Bot 菜单打开时用它拿 initData 免绑定登录；直接用浏览器打开时它不存在，不影响 -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root {
     --bg: #eff1ee; --strip: #bed4db; --border: #ABABA0; --white: #FFF;
@@ -176,6 +178,8 @@
   #mapHint { padding: 6px 10px; font-size: 12px; color: var(--dim); line-height: 1.5;
              border-top: 1px solid var(--bg); }
   .strip.foldable { cursor: pointer; user-select: none; }
+  /* Mini App 里已经自动登录，绑定引导没用了 */
+  body.in-tg #bindPanel { display: none !important; }
   .fold { background: transparent; border: none; padding: 0 4px; font-size: 12px;
           color: var(--dim); cursor: pointer; pointer-events: none; }
   /* 纯图标、无边框（顶部刷新用） */
@@ -382,6 +386,28 @@ let sales = [];
 let myWatches = [];
 
 // ── 绑定 ──
+const tgApp = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData
+  ? window.Telegram.WebApp : null;
+
+// 从 Bot 菜单打开时，用 Telegram 签名的 initData 换 u/k，不用再去复制绑定链接
+async function tgAutoLogin() {
+  if (!tgApp) return false;
+  try {
+    tgApp.ready();
+    tgApp.expand();
+    const resp = await fetch('/api/tgauth', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tgApp.initData }),
+    });
+    if (!resp.ok) return false;
+    const d = await resp.json();
+    if (!d.u || !d.k) return false;
+    cred = { u: String(d.u), k: d.k };
+    try { localStorage.setItem('ff14house_cred', JSON.stringify(cred)); } catch {}
+    return true;
+  } catch { return false; }
+}
+
 function loadCred() {
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.get('u') && hash.get('k')) {
@@ -866,6 +892,10 @@ function hoverPlot(key) {
 }
 
 // ── 启动 ──
+if (tgApp) {
+  document.body.classList.add('in-tg');   // Mini App 里不显示绑定引导
+  document.title = '抽房了吗';
+}
 renderNotifyChips();
 drawMap();
 // 窄屏没有悬停，地图摊在首屏只是占地方，默认收起；关注和房产默认展开
@@ -873,8 +903,11 @@ initFold('map', !window.matchMedia('(min-width: 900px)').matches);
 initFold('watch', false);
 initFold('home', false);
 loadCred();
-loadServers().then(() => { restoreUi(); loadSales(); });
-loadWatch();
+// Mini App 打开时先换令牌再拉数据；浏览器直接打开就走原来的路径
+(tgApp ? tgAutoLogin() : Promise.resolve(false)).then(() => {
+  loadServers().then(() => { restoreUi(); loadSales(); });
+  loadWatch();
+});
 $('selServer').addEventListener('change', () => { saveUi(); loadSales(); });
 ['selArea', 'selSize', 'selRegion', 'selSort'].forEach(id =>
   $(id).addEventListener('change', () => { saveUi(); renderSales(); }));

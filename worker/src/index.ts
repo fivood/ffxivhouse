@@ -217,6 +217,25 @@ async function tgSend(env: Env, chatId: number, text: string): Promise<void> {
 }
 
 /** 带内联按钮的消息（用于炸房提醒的一键打卡） */
+/** 发一条带「打开面板」Mini App 按钮的消息 */
+async function tgSendWebApp(env: Env, chatId: number, text: string, buttonText: string): Promise<void> {
+  if (!env.TG_BOT_TOKEN) {
+    console.log(`[no-token] -> ${chatId}: ${text} [web_app:${buttonText}]`);
+    return;
+  }
+  const resp = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      disable_web_page_preview: true,
+      reply_markup: { inline_keyboard: [[{ text: buttonText, web_app: { url: `${WEB_BASE}/` } }]] },
+    }),
+  });
+  if (!resp.ok) console.log('tgSendWebApp 失败', resp.status, await resp.text());
+}
+
 async function tgSendWithButton(env: Env, chatId: number, text: string, buttonText: string, callbackData: string): Promise<void> {
   if (!env.TG_BOT_TOKEN) {
     console.log(`[no-token] -> ${chatId}: ${text} [按钮:${buttonText} data:${callbackData}]`);
@@ -284,6 +303,49 @@ async function bindToken(env: Env, chatId: number): Promise<string> {
   return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 24);
 }
 
+/**
+ * 校验 Telegram Mini App 的 initData，通过则返回用户 id。
+ * 算法见官方文档：secret = HMAC_SHA256(key='WebAppData', msg=bot_token)，
+ * 再用 secret 对按 key 排序、去掉 hash 的 `k=v` 换行串签名，与 hash 比对。
+ */
+async function verifyInitData(env: Env, initData: string): Promise<number | null> {
+  if (!initData || !env.TG_BOT_TOKEN) return null;
+  const params = new URLSearchParams(initData);
+  const hash = params.get('hash');
+  if (!hash) return null;
+  params.delete('hash');
+  const checkString = [...params.entries()]
+    .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+    .map(([k, v]) => `${k}=${v}`)
+    .join('\n');
+
+  const enc = new TextEncoder();
+  const seedKey = await crypto.subtle.importKey(
+    'raw', enc.encode('WebAppData'), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const secret = await crypto.subtle.sign('HMAC', seedKey, enc.encode(env.TG_BOT_TOKEN));
+  const signKey = await crypto.subtle.importKey(
+    'raw', secret, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', signKey, enc.encode(checkString));
+  const hex = [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // 定长比较，别让比较耗时泄露信息
+  if (hex.length !== hash.length) return null;
+  let diff = 0;
+  for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ hash.charCodeAt(i);
+  if (diff !== 0) return null;
+
+  // 防重放：签发超过 24 小时的不认
+  const authDate = parseInt(params.get('auth_date') ?? '0', 10);
+  if (!authDate || Math.floor(Date.now() / 1000) - authDate > 86400) return null;
+
+  try {
+    const user = JSON.parse(params.get('user') ?? '{}');
+    return typeof user.id === 'number' ? user.id : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 校验 u/k 参数，返回 chatId 或 null */
 async function checkAuth(env: Env, url: URL): Promise<number | null> {
   const chatId = parseInt(url.searchParams.get('u') ?? '', 10);
@@ -325,6 +387,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /notify — 五类提醒的开关（/notify 序号 切换）
 /name 名字 — 设置网页版显示的昵称
 /servers — 服务器列表
+/panel — 打开网页面板（免绑定，点按钮即用）
 /help — 本帮助
 
 提醒时机：报名截止前 / 开奖 / 公示期确认归属死线 / 抽签金返还死线 / 下轮开抽
@@ -387,10 +450,22 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
   switch (cmd) {
     case '/start': {
       const token = await bindToken(env, chatId);
-      await tgSend(env, chatId,
-        `${HELP_TEXT}\n\n🌐 网页版（管理关注更方便）：\n${WEB_BASE}/#u=${chatId}&k=${token}\n（此链接含你的专属令牌，别分享给他人）`);
+      // 优先给 Mini App 按钮（点开即用，免绑定）；链接留着做备用/换设备
+      await tgSendWebApp(env, chatId,
+        `${HELP_TEXT}\n\n🌐 点下面的按钮直接打开面板（免绑定）。`
+        + `\n想在电脑浏览器里用就存这个链接：${WEB_BASE}/#u=${chatId}&k=${token}`
+        + `\n（含你的专属令牌，别分享给他人）`,
+        '🌐 打开面板');
       return;
     }
+    case '/panel': {
+      await tgSendWebApp(env, chatId,
+        '🌐 面板：在这里管关注、我的房产、提醒开关，还能看房区图。'
+        + `\n点下面的按钮直接打开，免绑定。`,
+        '🌐 打开面板');
+      return;
+    }
+
     case '/help':
       await tgSend(env, chatId, HELP_TEXT);
       return;
@@ -1097,6 +1172,14 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     item.fired = [];
     await saveSub(env, sub);
     return json({ ok: true, mode: item.mode });
+  }
+
+  // Mini App 免绑定登录：拿 initData 换这个人的 u/k
+  if (path === '/api/tgauth' && request.method === 'POST') {
+    const body = (await request.json()) as { initData?: string };
+    const chatId = await verifyInitData(env, body.initData ?? '');
+    if (chatId == null) return json({ error: 'initData 校验失败' }, 401);
+    return json({ u: chatId, k: await bindToken(env, chatId) });
   }
 
   // 分项提醒开关
