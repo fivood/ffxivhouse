@@ -47,19 +47,6 @@ public static class GameData
         _ => "?"
     };
 
-    /// <summary>尺寸表：[area][(houseId-1)%30]，0=S 1=M 2=L</summary>
-    private static readonly int[][] SizeTable =
-    [
-        [1,2,0,1,2,1,1,0,0,0,0,0,0,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1],
-        [1,0,2,0,1,2,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,2,0,1],
-        [0,0,0,1,2,1,0,1,0,0,1,1,2,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,2],
-        [1,0,0,0,0,0,2,1,0,0,0,0,1,0,1,2,0,0,1,0,1,0,0,1,0,0,0,1,0,2],
-        [0,1,0,0,0,0,1,1,0,0,0,0,2,0,0,0,1,1,0,0,1,2,0,0,0,0,0,0,0,2]
-    ];
-
-    public static int GetSize(int area, int houseId)
-    {
-        if (area < 0 || area >= SizeTable.Length || houseId < 1) return -1;
-        return SizeTable[area][(houseId - 1) % 30];
-    }
+    /// <summary>房屋尺寸：0=S 1=M 2=L，越界 -1。地块半边长推出，见 <see cref="HousingMap"/></summary>
+    public static int GetSize(int area, int houseId) => HousingMap.SizeIndex(area, houseId);
 }

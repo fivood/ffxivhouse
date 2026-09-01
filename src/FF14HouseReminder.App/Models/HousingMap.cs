@@ -38,6 +38,18 @@ public static class HousingMap
     public static (int X, int Z, int W)[] Ward(int area, int half) =>
         Plots[area][(half * 30)..(half * 30 + 30)];
 
-    /// <summary>按半边长判尺寸（和售楼中心的尺寸表偶有出入，以坐标为准）</summary>
+    /// <summary>按半边长判尺寸</summary>
     public static string SizeOf(int w) => w < 14 ? "S" : w < 18 ? "M" : "L";
+
+    /// <summary>
+    /// 房号（1-60）的尺寸：0=S 1=M 2=L，越界返回 -1。
+    /// 和 49902 条带 Size 的实际挂牌逐条核对过，无一不符——所以这里是尺寸的唯一来源，
+    /// 不再另抄一份尺寸表（早先手抄那份在白银乡 21 号、穹顶皓天 12/13/26 号上是错的）。
+    /// </summary>
+    public static int SizeIndex(int area, int plotId)
+    {
+        if (area < 0 || area >= Plots.Length || plotId < 1) return -1;
+        var w = Plots[area][(plotId - 1) % 60].W;
+        return w < 14 ? 0 : w < 18 ? 1 : 2;
+    }
 }
