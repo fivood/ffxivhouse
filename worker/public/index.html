@@ -199,6 +199,7 @@
           color: var(--dim); cursor: pointer; pointer-events: none; }
   /* 纯图标、无边框（顶部刷新用） */
   .icon-btn.plain { background: transparent; border: none; color: var(--dim); padding: 4px 6px; }
+  .head-btns { display: inline-flex; align-items: center; gap: 2px; }   /* 页头按钮一起靠右 */
   .icon-btn.plain:hover:not(:disabled) { background: transparent; color: var(--link); }
   /* 窄屏没有悬停，地图别把首屏占满 */
   @media (max-width: 899px) {
@@ -245,6 +246,7 @@
 
 <div class="row">
   <h1><img src="/icon-64.png" width="32" height="32" style="vertical-align:-8px;margin-right:10px">抽房了吗<span id="nickBadge" class="meta" style="margin-left:10px"></span></h1>
+  <span class="head-btns">
   <button class="icon-btn plain" id="pushBtn" onclick="togglePush(true)" title="推送设置" aria-label="推送设置">
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09c0 .69.4 1.31 1.03 1.6H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -258,6 +260,7 @@
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><polyline points="21 3 21 9 15 9"/></svg>
   </button>
+  </span>
 </div>
 <div class="meta" style="margin:2px 0 4px">
   数据来源 <a href="https://house.ffxiv.cyou" target="_blank">艾欧泽亚售楼中心</a>（玩家上报，可能延迟）
@@ -1024,7 +1027,7 @@ function defaultPlot() {
 
 // 滑过房屋卡片：把地图切到那套房所在的图并高亮它
 function hoverPlot(key) {
-  const { area, id } = parseKey(key);
+  const { area, slot, id } = parseKey(key);
   $('mapArea').value = area;
   $('mapSlot').value = slot;
   $('mapHalf').value = id > 30 ? 1 : 0;
