@@ -15,13 +15,19 @@
             </DockPanel>
 
             <WrapPanel DockPanel.Dock="Top" Margin="0,8,0,6">
-                <ComboBox x:Name="AreaBox" Width="112" Margin="0,0,4,0" SelectionChanged="Selection_Changed"/>
-                <ComboBox x:Name="HalfBox" Width="120" SelectionChanged="Selection_Changed"/>
+                <ComboBox x:Name="AreaBox" Width="104" Margin="0,0,4,4" SelectionChanged="Selection_Changed"/>
+                <ComboBox x:Name="SlotBox" Width="70" Margin="0,0,4,4" SelectionChanged="Selection_Changed"/>
+                <ComboBox x:Name="HalfBox" Width="120" Margin="0,0,0,4" SelectionChanged="Selection_Changed"/>
             </WrapPanel>
 
-            <TextBlock DockPanel.Dock="Bottom" Margin="0,7,0,0" FontSize="11" Foreground="#8A8A80"
-                       TextWrapping="Wrap"
-                       Text="鼠标滑过房屋列表（或图上地块）高亮对应地块。上方为北，同一房区各小区布局相同。"/>
+            <StackPanel DockPanel.Dock="Bottom" Margin="0,7,0,0">
+                <TextBlock x:Name="CountText" FontSize="11" Foreground="#55554A" FontWeight="Bold"/>
+                <TextBlock FontSize="11" Foreground="#8A8A80" TextWrapping="Wrap" Margin="0,2,0,0">
+                    <Run Text="■" Foreground="#A66A00"/><Run Text=" 在售（空地）　"/>
+                    <Run Text="■" Foreground="#6b6b60"/><Run Text=" 已住人　"/>
+                    <Run Text="滑过房屋列表高亮。上方为北，各小区布局相同。"/>
+                </TextBlock>
+            </StackPanel>
 
             <Border BorderBrush="#ABABA0" BorderThickness="1" Background="#F7F7F0">
                 <Viewbox Stretch="Uniform">

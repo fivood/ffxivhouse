@@ -41,6 +41,22 @@ public partial class MainWindow : Window
         SettingsPanelControl.RequestClose += () => _vm.ShowSettings = false;
         PlotMapPanelControl.RequestClose += () => _vm.ShowMap = false;
 
+        // 房区图要知道哪些地在售：没出现在在售列表里的，就是已经有人住了
+        PlotMapPanelControl.OnSaleLookup = (area, slot) =>
+        {
+            var server = _vm.SelectedServer?.Id ?? 0;
+            if (server == 0) return null;
+            var sales = App.Store.GetServerSales(server);
+            if (sales.Count == 0) return null;   // 该服还没数据，不做判断
+            return sales.Where(s => s.Data.Area == area && s.Data.Slot == slot)
+                        .Select(s => s.Data.ID).ToHashSet();
+        };
+        // 拉到新数据后重画（空置标记跟着变）
+        App.Store.DataUpdated += () => Dispatcher.Invoke(() =>
+        {
+            if (_vm.ShowMap) PlotMapPanelControl.Redraw();
+        });
+
         _ticker = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _ticker.Tick += (_, _) => _vm.Tick();
         _ticker.Start();
@@ -76,12 +92,12 @@ public partial class MainWindow : Window
         if (!_vm.ShowMap || sender is not FrameworkElement { DataContext: { } data }) return;
         var plot = data switch
         {
-            HouseItemViewModel h => (h.Snapshot.Data.Area, h.Snapshot.Data.ID),
-            WatchViewModel w => (w.Item.Area, w.Item.Id),
-            HomeViewModel m => (m.Item.Area, m.Item.Id),
-            _ => (-1, -1)
+            HouseItemViewModel h => (h.Snapshot.Data.Area, h.Snapshot.Data.Slot, h.Snapshot.Data.ID),
+            WatchViewModel w => (w.Item.Area, w.Item.Slot, w.Item.Id),
+            HomeViewModel m => (m.Item.Area, m.Item.Slot, m.Item.Id),
+            _ => (-1, -1, -1)
         };
-        if (plot.Item1 >= 0) PlotMapPanelControl.Highlight(plot.Item1, plot.Item2);
+        if (plot.Item1 >= 0) PlotMapPanelControl.Highlight(plot.Item1, plot.Item2, plot.Item3);
     }
 
     private void HomesStrip_Click(object sender, System.Windows.Input.MouseButtonEventArgs e) =>

@@ -17,30 +17,50 @@ public partial class PlotMapPanel : UserControl
     private static readonly Brush HitStroke = Freeze(new SolidColorBrush(Color.FromRgb(0x14, 0x54, 0x5E)));
     private static readonly Brush HitFill = Freeze(new SolidColorBrush(Color.FromArgb(0x6B, 0x2D, 0x8C, 0x9D)));
     private static readonly Brush LabelBg = Freeze(new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)));
+    // 在售＝空地（橙），已住人（灰）
+    private static readonly Brush FreeFill = Freeze(new SolidColorBrush(Color.FromArgb(0x57, 0xA6, 0x6A, 0x00)));
+    private static readonly Brush FreeStroke = Freeze(new SolidColorBrush(Color.FromRgb(0xA6, 0x6A, 0x00)));
+    private static readonly Brush TakenFill = Freeze(new SolidColorBrush(Color.FromArgb(0x61, 0x37, 0x37, 0x30)));
 
     private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
 
     private readonly Rectangle[] _cells = new Rectangle[30];
-    private int _drawnArea = -1, _drawnHalf = -1, _hit;
+    private int _drawnArea = -1, _drawnHalf = -1, _drawnSlot = -1, _hit;
 
     public event Action? RequestClose;
+
+    /// <summary>
+    /// 取某小区正在售的房号。售楼中心只给在售的房，没出现的就是已经有人住了；
+    /// 返回 null 表示没有数据（还没加载/该服无上报），这时不做空置判断。
+    /// </summary>
+    public Func<int, int, HashSet<int>?>? OnSaleLookup;
 
     public PlotMapPanel()
     {
         InitializeComponent();
         AreaBox.ItemsSource = GameData.AreaNames;
+        SlotBox.ItemsSource = Enumerable.Range(1, 30).Select(i => $"{i}区").ToArray();
         HalfBox.ItemsSource = new[] { "主城区 1-30 号", "扩建区 31-60 号" };
         AreaBox.SelectedIndex = 0;
+        SlotBox.SelectedIndex = 0;
         HalfBox.SelectedIndex = 0;
     }
 
     /// <summary>切到这套房所在的图，并只高亮它</summary>
-    public void Highlight(int area, int plotId)
+    public void Highlight(int area, int slot, int plotId)
     {
         if (area < 0 || area >= GameData.AreaNames.Length || plotId < 1 || plotId > 60) return;
         _hit = plotId;
         AreaBox.SelectedIndex = area;
+        if (slot >= 0 && slot < 30) SlotBox.SelectedIndex = slot;
         HalfBox.SelectedIndex = plotId > 30 ? 1 : 0;
+        Draw();
+    }
+
+    /// <summary>在售数据变了，重画一次（空置标记跟着更新）</summary>
+    public void Redraw()
+    {
+        _drawnArea = -1;
         Draw();
     }
 
@@ -50,29 +70,43 @@ public partial class PlotMapPanel : UserControl
 
     private void Draw()
     {
-        int area = AreaBox.SelectedIndex, half = HalfBox.SelectedIndex;
+        int area = AreaBox.SelectedIndex, half = HalfBox.SelectedIndex, slot = SlotBox.SelectedIndex;
         if (area < 0 || half < 0) return;
 
-        if (area != _drawnArea || half != _drawnHalf)
+        if (area != _drawnArea || half != _drawnHalf || slot != _drawnSlot)
         {
             _drawnArea = area;
             _drawnHalf = half;
-            Build(area, half);
+            _drawnSlot = slot;
+            Build(area, half, Math.Max(slot, 0));
         }
 
         for (var i = 0; i < 30; i++)
         {
             var isHit = half * 30 + i + 1 == _hit;
-            _cells[i].Fill = isHit ? HitFill : Brushes.Transparent;
-            _cells[i].Stroke = isHit ? HitStroke : CellStroke;
-            _cells[i].StrokeThickness = isHit ? 4 : 1;
-            _cells[i].StrokeDashArray = isHit ? null : new DoubleCollection { 4, 4 };
+            if (isHit)
+            {
+                _cells[i].Fill = HitFill;
+                _cells[i].Stroke = HitStroke;
+                _cells[i].StrokeThickness = 4;
+                _cells[i].StrokeDashArray = null;
+            }
+            else
+            {
+                // 恢复成空置底色（Build 时算好的，存在 Tag 里）
+                _cells[i].Fill = _cells[i].Tag as Brush ?? Brushes.Transparent;
+                _cells[i].Stroke = ReferenceEquals(_cells[i].Tag, FreeFill) ? FreeStroke : CellStroke;
+                _cells[i].StrokeThickness = 1;
+                _cells[i].StrokeDashArray = ReferenceEquals(_cells[i].Tag, FreeFill) ? null : new DoubleCollection { 4, 4 };
+            }
         }
     }
 
-    private void Build(int area, int half)
+    private void Build(int area, int half, int slot)
     {
         var ward = HousingMap.Ward(area, half);
+        var onSale = OnSaleLookup?.Invoke(area, slot);
+        var free = 0;
         // 十张图共用同一个正方形取景框：各房区跨度 201~367、宽高比 0.58~1.73，
         // 各裁各的会让切换房区时缩放忽大忽小（网页端还会顶得下面的列表乱跳）
         var cx = (ward.Min(p => p.X) + ward.Max(p => p.X)) / 2.0;
@@ -104,16 +138,20 @@ public partial class PlotMapPanel : UserControl
             var (x, z, w) = ward[i];
             var no = half * 30 + i + 1;
 
+            var isFree = onSale?.Contains(no) ?? false;
+            if (isFree) free++;
             var cell = new Rectangle
             {
                 Width = w * 2,
                 Height = w * 2,
-                Fill = Brushes.Transparent,
+                Fill = onSale == null ? Brushes.Transparent : isFree ? FreeFill : TakenFill,
                 ToolTip = $"{no} 号 [{HousingMap.SizeOf(w)}]"
+                          + (onSale == null ? "" : isFree ? " · 在售" : " · 已住人")
             };
             cell.MouseEnter += (_, _) => { _hit = no; Draw(); };
             Canvas.SetLeft(cell, x - w - x0);
             Canvas.SetTop(cell, z - w - z0);
+            cell.Tag = cell.Fill;   // 记住空置底色，取消高亮时恢复
             MapCanvas.Children.Add(cell);
             _cells[i] = cell;
 
@@ -132,5 +170,9 @@ public partial class PlotMapPanel : UserControl
             Canvas.SetTop(label, z - z0 - label.DesiredSize.Height / 2);
             MapCanvas.Children.Add(label);
         }
+
+        CountText.Text = onSale == null
+            ? "在售数据加载中…"
+            : $"这半个小区 30 块地，在售 {free} 块";
     }
 }
