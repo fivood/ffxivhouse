@@ -389,9 +389,10 @@ async function checkAuth(env: Env, url: URL): Promise<string | null> {
 }
 
 /** POST 体的 u/k 校验 */
-async function checkAuthBody(env: Env, body: { u?: number; k?: string }): Promise<number | null> {
-  if (typeof body.u !== 'number' || !body.k) return null;
-  return (await bindToken(env, body.u)) === body.k ? body.u : null;
+async function checkAuthBody(env: Env, body: { u?: number | string; k?: string }): Promise<string | null> {
+  const id = String(body.u ?? '').trim();
+  if (!/^[A-Za-z0-9]{1,32}$/.test(id) || !body.k) return null;
+  return (await bindToken(env, id)) === body.k ? id : null;
 }
 
 // ═══════════════ 命令解析 ═══════════════
@@ -1259,6 +1260,40 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     item.fired = [];
     await saveSub(env, sub);
     return json({ ok: true, mode: item.mode });
+  }
+
+  // 匿名账号：没有 Telegram 也能用。前端第一次写数据时调用
+  if (path === '/api/register' && request.method === 'POST') {
+    const id = 'a' + crypto.randomUUID().replace(/-/g, '').slice(0, 15);
+    await saveSub(env, { id, chatId: 0, leadHours: [24, 1], items: [] });
+    return json({ u: id, k: await bindToken(env, id) });
+  }
+
+  // 绑 TG 时把匿名账号的数据并过去，免得攒的关注白丢
+  if (path === '/api/merge' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: string; k?: string; fromU?: string; fromK?: string };
+    const to = await checkAuthBody(env, body);
+    const from = await checkAuthBody(env, { u: body.fromU, k: body.fromK });
+    if (to == null || from == null) return json({ error: '令牌无效' }, 401);
+    if (to === from) return json({ ok: true, merged: 0 });
+
+    const dst = await getSub(env, to);
+    const src = await getSub(env, from);
+    const keyOf = (w: { server: number; area: number; slot: number; id: number }) =>
+      `${w.server}:${w.area}:${w.slot}:${w.id}`;
+    const have = new Set(dst.items.map(keyOf));
+    let merged = 0;
+    for (const w of src.items) if (!have.has(keyOf(w))) { dst.items.push(w); merged++; }
+    const homes = dst.homes ?? [];
+    const haveHome = new Set(homes.map(keyOf));
+    for (const h of src.homes ?? []) if (!haveHome.has(keyOf(h))) { homes.push(h); merged++; }
+    dst.homes = homes;
+    dst.barkKey ??= src.barkKey;
+    dst.wxpusherSpt ??= src.wxpusherSpt;
+    dst.notify ??= src.notify;
+    await saveSub(env, dst);
+    await env.KV.delete(`sub:${from}`);
+    return json({ ok: true, merged });
   }
 
   // Mini App 免绑定登录：拿 initData 换这个人的 u/k
