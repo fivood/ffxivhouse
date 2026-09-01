@@ -69,6 +69,14 @@
   .home-actions input[type=date] { width: 118px; margin: 0; }
   .home-actions .lbl { display: none; }   /* 宽屏靠 title 提示，挤进一行 */
   .home-actions .btn-danger { color: var(--red); }
+  /* 已进屋：打过卡就上色，和旁边的灰按钮区分开；45 天倒计时每 9 天换一档 */
+  .btn-enter.lit { color: #fff; border-color: rgba(0, 0, 0, .3); }
+  .btn-enter.lit:hover:not(:disabled) { filter: brightness(1.12); border-color: rgba(0, 0, 0, .3); }
+  .btn-enter.d0 { background: var(--blue); }
+  .btn-enter.d1 { background: var(--green); }
+  .btn-enter.d2 { background: var(--link); }
+  .btn-enter.d3 { background: var(--amber); }
+  .btn-enter.d4 { background: var(--red); }
   .filters { background: var(--strip); border: 1px solid var(--border); border-top: none;
              display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; }
   .empty { padding: 22px 16px; text-align: center; color: var(--dim); }
@@ -550,6 +558,9 @@ function renderSales() {
 // ── 我的房产（炸房提醒） ──
 function homeKey(h) { return `${h.server}:${h.area}:${h.slot}:${h.id}`; }
 
+// 45 天倒计时切成 5 段，每段 9 天：蓝 → 绿 → 青 → 黄 → 红
+const enterStage = d => d > 36 ? 0 : d > 27 ? 1 : d > 18 ? 2 : d > 9 ? 3 : 4;
+
 function renderHomes() {
   const el = $('homeList');
   if (!myHomes.length) { el.innerHTML = '<div class="empty">暂无登记，在下方添加</div>'; return; }
@@ -578,7 +589,7 @@ function renderHomes() {
           ? `<input type="date" id="dd-${key}" max="${todayStr()}" title="房子被拆的那天">
         <button class="icon-btn" title="按所选日期更正炸房日" aria-label="改炸房日" onclick="setDemolishDate('${key}')">${ico('calendar')}<span class="lbl">改炸房日</span></button>
         <button class="icon-btn" title="房子还在？取消炸房标记" aria-label="取消炸房" onclick="demolishHome('${key}')">${ico('undo')}<span class="lbl">取消炸房</span></button>`
-          : `<button class="icon-btn btn-enter" title="刚进过屋，打卡重置倒计时" onclick="enteredHome('${key}')">${ico('home')}已进屋</button>
+          : `<button class="icon-btn btn-enter ${h.lastEnteredAt > 0 ? 'lit d' + enterStage(h.remainDays) : ''}" title="刚进过屋，打卡重置倒计时" onclick="enteredHome('${key}')">${ico('check')}已进屋</button>
         <input type="date" id="bd-${key}" max="${todayStr()}" title="日期：补签进屋日 / 标记炸房日都用它，留空按今天算">
         <button class="icon-btn" title="按所选日期补签进屋" aria-label="补签" onclick="backfillHome('${key}')">${ico('calendar')}<span class="lbl">补签</span></button>
         <button class="icon-btn btn-danger" title="房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算" aria-label="我房炸了" onclick="demolishHome('${key}')">${ico('zap')}<span class="lbl">我房炸了</span></button>`}

@@ -104,6 +104,8 @@ public partial class HomeViewModel : ObservableObject
 
     [ObservableProperty] private string _statusText = "";
     [ObservableProperty] private string _statusColor = "#8A8A80";
+    /// <summary>已进屋按钮的底色：45 天倒计时每 9 天一档，没打过卡时留空走默认灰</summary>
+    [ObservableProperty] private string _enterColor = "";
     [ObservableProperty] private DateTime? _backfillDate;
 
     public HomeViewModel(HomeEntry item, DateTimeOffset now)
@@ -120,6 +122,8 @@ public partial class HomeViewModel : ObservableObject
     public string DemolishTip => Item.DemolishedAt > 0
         ? "房子还在？取消炸房标记"
         : "房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算";
+    /// <summary>打过卡（已进屋按钮上色）</summary>
+    public bool HasEntered => Item.DemolishedAt <= 0 && Item.LastEnteredAt > 0;
     /// <summary>没炸房时才显示打卡/补签</summary>
     public bool NotDemolished => Item.DemolishedAt <= 0;
     public bool Demolished => Item.DemolishedAt > 0;
@@ -144,6 +148,7 @@ public partial class HomeViewModel : ObservableObject
         {
             StatusText = "进屋时间未知，进屋后打卡";
             StatusColor = "#8A8A80";
+            EnterColor = "";
             return;
         }
         var remain = Item.Deadline - now;
@@ -152,12 +157,16 @@ public partial class HomeViewModel : ObservableObject
             ? $"剩余 {days} 天（最后进屋 {Item.Deadline.AddDays(-45).LocalDateTime:MM-dd}）"
             : "已超过 45 天未进屋！";
         StatusColor = days <= 1 ? "#B03030" : days <= 5 ? "#B06030" : days <= 10 ? "#A66A00" : "#4C7A34";
+        // 45 天切成 5 段，每段 9 天：蓝 → 绿 → 青 → 黄 → 红
+        EnterColor = days > 36 ? "#3B5BA5" : days > 27 ? "#4C7A34" : days > 18 ? "#2D8C9D"
+                   : days > 9 ? "#A66A00" : "#B03030";
     }
 
     private void NotifyDemolishState()
     {
         OnPropertyChanged(nameof(DemolishText));
         OnPropertyChanged(nameof(DemolishTip));
+        OnPropertyChanged(nameof(HasEntered));
         OnPropertyChanged(nameof(NotDemolished));
         OnPropertyChanged(nameof(Demolished));
     }

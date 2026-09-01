@@ -249,12 +249,25 @@
                                                Text="{Binding StatusText, Mode=OneWay}"
                                                Foreground="{Binding StatusColor}"/>
                                     <WrapPanel Margin="0,6,0,0">
-                                        <Button Content="🏠 已进屋" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                        <Button Content="✔ 已进屋" Margin="0,0,4,0"
                                                 Visibility="{Binding NotDemolished, Converter={StaticResource BoolToVis}}"
                                                 ToolTip="刚进过屋，打卡重置倒计时"
                                                 Command="{Binding DataContext.EnterHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                                CommandParameter="{Binding}"/>
+                                                CommandParameter="{Binding}">
+                                            <!-- 打过卡就按 45 天倒计时上色（每 9 天一档），和旁边的灰按钮区分开 -->
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource RetroBtn}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasEntered}" Value="True">
+                                                            <Setter Property="Background" Value="{Binding EnterColor}"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                            <Setter Property="BorderBrush" Value="#55554A"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                         <DatePicker SelectedDate="{Binding BackfillDate}" Width="105" Margin="0,0,4,0"
                                                     DisplayDateEnd="{Binding DataContext.Today,
                                                         RelativeSource={RelativeSource AncestorType=ListBox}}"
