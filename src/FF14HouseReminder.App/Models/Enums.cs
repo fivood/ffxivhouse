@@ -49,15 +49,15 @@ public enum ReminderType
     EntryDeadline = 0,
     /// <summary>进入公示期（开奖）</summary>
     ResultsStart = 1,
-    /// <summary>公示期截止前（领房/领回押金死线）</summary>
+    /// <summary>公示期截止前（中签确认归属死线）</summary>
     ClaimDeadline = 2,
     /// <summary>下轮申请期开始</summary>
     NextEntryStart = 3,
     /// <summary>炸房警告（45 天未进房）</summary>
     Demolition = 4,
-    /// <summary>落选押金返还死线（公示期结束后 90 天）</summary>
+    /// <summary>抽签金返还死线（公示期结束后 90 天，不论中标与否都要点门牌确认）</summary>
     DepositDeadline = 5,
-    /// <summary>炸房后旧家具保管死线（35 天）</summary>
+    /// <summary>拆除后资产回收死线（35 天：家具庭具 + 购地金币的 80%）</summary>
     FurnitureDeadline = 6
 }
 

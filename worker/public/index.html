@@ -278,7 +278,7 @@
 <div id="homeSection" style="display:none">
   <div class="strip foldable" onclick="toggleFold('home')" title="点标题条收起 / 展开">
     <span>⊙ 我的房产 <button class="fold" id="homeArrow">▾</button>
-      <span class="meta" style="font-weight:normal">45 天未进屋会拆除</span></span></div>
+      <span class="meta" style="font-weight:normal">30 天进入拆除准备，45 天拆除</span></span></div>
   <div class="panel" data-fold="home">
     <div id="homeList"><div class="empty">暂无登记</div></div>
     <div class="bind-box" style="border-top:1px solid var(--bg)">
@@ -600,7 +600,7 @@ function renderHomes() {
       let status;
       if (h.demolishedAt > 0) {
         const d = Math.floor((h.furnitureDeadline - Date.now() / 1000) / 86400);
-        status = `<span style="color:${d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : '#7B5EA7'};font-weight:bold">💥 已炸房，旧家具保管${d >= 0 ? `还剩 ${d} 天` : '已到期！'}</span>` +
+        status = `<span style="color:${d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : '#7B5EA7'};font-weight:bold">💥 已炸房，资产回收${d >= 0 ? `还剩 ${d} 天` : '已到期！'}</span>` +
           ` <span class="meta">${fmtDate(h.furnitureDeadline)} 到期</span>`;
       } else if (h.lastEnteredAt <= 0) {
         status = '<span class="est">进屋时间未知，进屋后打卡</span>';
@@ -622,7 +622,7 @@ function renderHomes() {
         <button class="icon-btn" title="房子还在？取消炸房标记" aria-label="取消炸房" onclick="demolishHome('${key}')">${ico('undo')}<span class="lbl">取消炸房</span></button>`
           : `<input type="date" id="bd-${key}" max="${todayStr()}" title="日期：补签进屋日 / 标记炸房日都用它，留空按今天算">
         <button class="icon-btn" title="按所选日期补签进屋" aria-label="补签" onclick="backfillHome('${key}')">${ico('calendar')}<span class="lbl">补签</span></button>
-        <button class="icon-btn btn-danger" title="房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算" aria-label="我房炸了" onclick="demolishHome('${key}')">${ico('zap')}<span class="lbl">我房炸了</span></button>`}
+        <button class="icon-btn btn-danger" title="房子被拆了？开始 35 天资产回收倒计时（家具庭具 + 购地金币 80%）；选了日期就按那天起算" aria-label="我房炸了" onclick="demolishHome('${key}')">${ico('zap')}<span class="lbl">我房炸了</span></button>`}
         <button class="icon-btn" title="移除这套房产" aria-label="移除这套房产" onclick="removeHome('${key}')">${ico('trash')}</button>
       </div>
     </div>`;
@@ -665,7 +665,7 @@ async function demolishHome(key) {
   const el = $(`bd-${key}`);   // 只有未炸房的行有这个输入框，取消炸房时不会带日期
   const date = el && el.value ? el.value : undefined;
   const data = await submit('POST', '/api/demolished', { ...parseKey(key), date });
-  if (data) toast(data.demolishedAt > 0 ? '已标记炸房，家具保管倒计时开始' : '已取消炸房标记');
+  if (data) toast(data.demolishedAt > 0 ? '已标记炸房，资产回收倒计时开始' : '已取消炸房标记');
 }
 
 // 更正炸房日期（已炸房的行）
@@ -723,7 +723,7 @@ const NOTIFY_ITEMS = [
   ['entry', '报名截止', '申请期截止前提醒去报名（计划抽的房）'],
   ['results', '开奖', '进入公示期，已报名的房出结果了'],
   ['claim', '确认归属', '公示期截止前提醒中签购入，逾期扣 50% 申请金'],
-  ['deposit', '领回押金', '落选押金返还死线（公示期结束后 90 天），逾期不返还'],
+  ['deposit', '返还抽签金', '抽签金返还死线：公示期结束后 90 天内要去点门牌确认，不论中标与否，逾期不返还'],
   ['next', '下轮开抽', '准备期结束、新一轮申请期开始'],
 ];
 let notifyFlags = { entry: true, results: true, claim: true, deposit: true, next: true };

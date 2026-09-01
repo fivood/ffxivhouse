@@ -18,7 +18,7 @@ public class WatchItem
     public HashSet<string> FiredReminders { get; set; } = [];
 
     /// <summary>
-    /// 落选押金返还死线。公示期见到「已报名」时记在这里。
+    /// 抽签金返还死线。公示期见到「已报名」时记在这里。
     /// 死线在公示期结束后 90 天，那时房子早已从在售列表消失、阶段也不是公示期了，
     /// 挂在当前阶段上算永远等不到，必须自己记住。
     /// </summary>
@@ -57,7 +57,7 @@ public class ReminderSettings
     /// <summary>公示期截止前提醒（中签确认归属死线，逾期扣 50% 申请金）</summary>
     public bool NotifyClaimDeadline { get; set; } = true;
 
-    /// <summary>落选押金返还死线提醒（公示期结束后 90 天，逾期不返还）</summary>
+    /// <summary>抽签金返还死线提醒（公示期结束后 90 天，逾期不返还）</summary>
     public bool NotifyDepositDeadline { get; set; } = true;
 
     /// <summary>下轮申请期开始提醒</summary>

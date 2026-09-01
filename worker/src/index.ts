@@ -79,7 +79,7 @@ interface WatchItem {
   /** 已触发的提醒去重 key */
   fired: string[];
   /**
-   * 落选押金返还死线（unix 秒）。公示期见到「已报名」时盖在关注项上。
+   * 抽签金返还死线（unix 秒）。公示期见到「已报名」时盖在关注项上。
    * 死线在公示期结束后 90 天，那时房子早已从在售列表消失、阶段也不是公示期了，
    * 挂在阶段上算永远等不到，必须自己记住。
    */
@@ -93,7 +93,7 @@ interface HomeEntry {
   label: string;
   /** 最后一次进房时间（unix 秒），0=未知 */
   lastEnteredAt: number;
-  /** 炸房（被拆除）时间（unix 秒），0=未炸房。炸房后旧家具由 NPC 保管 35 天 */
+  /** 炸房（被拆除）时间（unix 秒），0=未炸房。拆除后 35 天内可回收资产 */
   demolishedAt?: number;
   fired: string[];
 }
@@ -101,10 +101,10 @@ interface HomeEntry {
 /** 炸房规则：45 天未进房进入拆除准备 */
 const DEMOLITION_DAYS = 45;
 /** 炸房提醒提前量（天） */
-const DEMOLITION_LEAD_DAYS = [10, 5, 1];
-/** 落选押金返还期限：公示期结束后 90 天 */
+const DEMOLITION_LEAD_DAYS = [15, 10, 5, 1];   // 15 = 第 30 天，游戏里刚进入「自动拆除准备」的节点
+/** 抽签金返还期限：公示期结束后 90 天（不论中标与否，都要点门牌确认才返还） */
 const DEPOSIT_DAYS = 90;
-/** 炸房后旧家具保管期限（天） */
+/** 拆除后资产回收期限（天）：家具庭具 + 购地金币的 80% */
 const FURNITURE_DAYS = 35;
 
 /** YYYY-MM-DD → 北京时间当天 00:00 的 unix 秒（保守，提醒偏早不偏晚）；非法/未来返回错误 */
@@ -121,7 +121,7 @@ interface NotifyFlags {
   entry: boolean;    // 申请期截止前（快去报名）
   results: boolean;  // 开奖（进入公示期）
   claim: boolean;    // 公示期截止前（中签确认归属死线）
-  deposit: boolean;  // 落选押金返还死线
+  deposit: boolean;  // 抽签金返还死线（公示期结束后 90 天）
   next: boolean;     // 下轮申请期开始
 }
 const NOTIFY_ALL: NotifyFlags = { entry: true, results: true, claim: true, deposit: true, next: true };
@@ -326,13 +326,13 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /servers — 服务器列表
 /help — 本帮助
 
-提醒时机：报名截止前 / 开奖 / 公示期领房死线 / 下轮开抽
+提醒时机：报名截止前 / 开奖 / 公示期确认归属死线 / 抽签金返还死线 / 下轮开抽
 
-炸房提醒（45 天未进屋拆除）：
+炸房提醒（连续 30 天未进屋进入拆除准备，45 天自动拆除）：
 /myhome 服务器 房区 区号 房号 [角色名] — 登记我的房产
 　例：/myhome 萌芽池 白银乡 14 43 阿光
 /entered [序号] [日期] — 进屋打卡；带日期=补签（如 /entered 1 8-30）
-/demolished [序号] — 标记房子已被拆除（开始旧家具 35 天保管倒计时），再发一次取消
+/demolished [序号] — 标记房子已被拆除（开始 35 天资产回收倒计时），再发一次取消
 /homes — 我的房产与炸房倒计时
 
 数据来源：house.ffxiv.cyou（玩家上报，可能有延迟）`;
@@ -570,7 +570,7 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
       await tgSend(env, chatId,
         `🏠 已登记：${server.name} ${AREA_NAMES[area]} ${slot}区 ${plotId}号（${label || '我的房'}）\n` +
         `已按现在起算 ${DEMOLITION_DAYS} 天倒计时。如果最近没进过屋，进屋后发 /entered 校准。\n` +
-        `提醒：45 天未进屋会进入拆除准备，以游戏内规则为准。`);
+        `提醒：连续 30 天未进屋会被列为撤除对象，45 天自动拆除，以游戏内规则为准。`);
       return;
     }
 
@@ -653,7 +653,7 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
         h.fired = [];
         await saveSub(env, sub);
         await tgSend(env, chatId,
-          `已标记「${h.label}」被拆除。\n🪑 旧家具由管理人保管 ${FURNITURE_DAYS} 天（至 ${fmtTime(h.demolishedAt + FURNITURE_DAYS * 86400)}），记得去取回！到期前会再提醒你。`);
+          `已标记「${h.label}」被拆除。\n🪑 ${FURNITURE_DAYS} 天内可去住宅区管理人处回收部分家具庭具 + 购地金币的 80%（至 ${fmtTime(h.demolishedAt + FURNITURE_DAYS * 86400)}），到期前会再提醒你。`);
       }
       return;
     }
@@ -672,7 +672,7 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
         if (h.demolishedAt && h.demolishedAt > 0) {
           const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
           const days = Math.floor((fDeadline - nowSec) / 86400);
-          return `${pos}\n　💥 已炸房，旧家具保管${days >= 0 ? `还剩 ${days} 天` : '已到期！'}（${fmtTime(fDeadline).slice(0, 5)} 到期）`;
+          return `${pos}\n　💥 已炸房，资产回收${days >= 0 ? `还剩 ${days} 天` : '已到期！'}（${fmtTime(fDeadline).slice(0, 5)} 到期）`;
         }
         if (h.lastEnteredAt <= 0) return `${pos}\n　进屋时间未知，进屋后发 /entered ${i + 1}`;
         const deadline = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
@@ -728,12 +728,12 @@ async function runReminders(env: Env): Promise<void> {
     let dirty = false;
     const due: DueReminder[] = [];
 
-    // ── 炸房提醒（45 天未进房 / 炸房后旧家具保管 35 天）──
+    // ── 炸房提醒（45 天未进房 / 拆除后资产回收 35 天）──
     for (const h of sub.homes ?? []) {
       const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
       const pos = `${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
 
-      // 已炸房：旧家具保管 35 天死线
+      // 已炸房：资产回收 35 天死线
       if (h.demolishedAt && h.demolishedAt > 0) {
         const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
         // 同上：只发当前所处的那一档（补的炸房日期很旧时，别先发一条过时的「还剩 10 天」）
@@ -750,8 +750,10 @@ async function runReminders(env: Env): Promise<void> {
           dirty = true;
           due.push({
             chatId: sub.chatId,
-            title: `🪑 旧家具保管即将到期：还剩 ${days} 天`,
-            body: `${pos}\n已被拆除，旧家具由管理人保管 ${FURNITURE_DAYS} 天，将于 ${fmtTime(fDeadline)} 到期！请尽快去住宅区管理人处取回，逾期将被丢弃！`,
+            title: `🪑 拆除资产回收即将到期：还剩 ${days} 天`,
+            body: `${pos}\n自动拆除后 ${FURNITURE_DAYS} 天内可去住宅区管理人处回收部分家具庭具，`
+              + `以及购买土地所花金币的 80%。`
+              + `\n将于 ${fmtTime(fDeadline)} 到期，逾期无法回收！`,
             homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
           });
         }
@@ -760,8 +762,9 @@ async function runReminders(env: Env): Promise<void> {
           dirty = true;
           due.push({
             chatId: sub.chatId,
-            title: '🪑 旧家具保管已到期',
-            body: `${pos}\n旧家具保管 ${FURNITURE_DAYS} 天期限已到！若还没取回，请立刻去管理人处确认！`,
+            title: '🪑 拆除资产回收已到期',
+            body: `${pos}\n自动拆除后 ${FURNITURE_DAYS} 天回收期限已到（家具庭具 + 购地金币的 80%）！`
+              + `若还没回收，请立刻去住宅区管理人处确认！`,
             homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
           });
         }
@@ -786,8 +789,16 @@ async function runReminders(env: Env): Promise<void> {
         dirty = true;
         due.push({
           chatId: sub.chatId,
-          title: `🚨 炸房警告：还剩 ${days} 天`,
-          body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进屋！${days <= 1 ? '今天必须进屋，否则将进入拆除流程！' : '记得上线进一次屋（进入室内才算）。'}\n进屋后点下方按钮或发 /entered 打卡。`,
+          title: days >= 15 ? '⚠️ 已进入自动拆除准备' : `🚨 炸房警告：还剩 ${days} 天`,
+          // 15 天档＝连续 30 天未进屋，游戏里此时才刚被列为撤除对象（任务情报里会显示）
+          body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进屋，`
+            + (days >= 15
+                ? `已被列为撤除对象、进入「自动拆除准备」状态，任务情报-房屋里能看到剩余天数。`
+                : days <= 1
+                  ? `今天必须进屋，否则将被自动拆除！`
+                  : `记得上线进一次屋（要进入室内才算）。`)
+            + `\n个人房只认房主进屋；部队房部队任一成员进屋即可解除。`
+            + `\n进屋后点下方按钮或发 /entered 打卡。`,
           homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
         });
       }
@@ -811,7 +822,7 @@ async function runReminders(env: Env): Promise<void> {
       const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
       const pos = `${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?'}]`;
 
-      // 落选押金返还：死线在公示期结束后 90 天，那时房子早已不在在售列表里，
+      // 抽签金返还：死线在公示期结束后 90 天，那时房子早已不在在售列表里，
       // 所以这段必须走在下面的 `if (!house) continue` 之前，只认关注项自己记的死线
       if (w.depositDeadline) {
         if (nowSec >= w.depositDeadline) {
@@ -827,9 +838,10 @@ async function runReminders(env: Env): Promise<void> {
             dirty = true;
             due.push({
               chatId: sub.chatId,
-              title: '💰 落选押金返还即将截止',
-              body: `${pos}\n若你上轮落选，押金返还期限（公示期结束后 ${DEPOSIT_DAYS} 天）将于 `
-                + `${fmtTime(w.depositDeadline)} 截止，逾期将不予返还！记得上线点门牌领回金币。`,
+              title: '💰 抽签金返还即将截止',
+              body: `${pos}\n申请抽选时全额支付的金币，要你去点门牌确认才会返还，系统不会自动退！`
+                + `\n返还期限为公示期结束后 ${DEPOSIT_DAYS} 天，将于 ${fmtTime(w.depositDeadline)} 截止，逾期不再返还。`
+                + `\n（不论中标与否都适用：落选是全额返还，中标未购入是扣 50% 后的余额。）`,
             });
           }
         }
@@ -870,8 +882,8 @@ async function runReminders(env: Env): Promise<void> {
           if (notify.entry) {
             for (const h of sub.leadHours) {
               consider(0, h, phase.end - h * 3600, '⏰ 抽房报名即将截止',
-                `${pos}
-申请期将于 ${fmtTime(phase.end)} 截止，想去抽记得上线报名！`);
+                `${pos}\n申请期将于 ${fmtTime(phase.end)} 截止，想去抽记得上线报名！`
+                + `\n报名需全额支付土地价格，参加后无法主动取消，且每个角色同时只能参与一处土地。`);
             }
           }
         }
@@ -892,7 +904,7 @@ async function runReminders(env: Env): Promise<void> {
 公示期将于 ${fmtTime(phase.end)} 截止。中签请立即购入，逾期将失去资格并被扣除 50% 申请金！`);
           }
         }
-        // 已报名的，把落选押金返还死线记在关注项上；房子从在售列表消失后还能按它提醒
+        // 已报名的，把抽签金返还死线记在关注项上；房子从在售列表消失后还能按它提醒
         if (w.mode === 1) {
           const depositEnd = phase.end + DEPOSIT_DAYS * 86400;
           if (w.depositDeadline !== depositEnd) {
