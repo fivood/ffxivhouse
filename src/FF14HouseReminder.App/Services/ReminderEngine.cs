@@ -34,9 +34,31 @@ public class ReminderEngine
         var now = DateTimeOffset.Now;
         var settings = _config.Config.Reminders;
         var list = new List<ScheduledReminder>();
+        var watchDirty = false;
 
         foreach (var watch in _config.Config.WatchList.Where(w => w.Enabled))
         {
+            // 落选押金返还：死线在公示期结束后 90 天，那时房子已从在售列表消失、
+            // 阶段也早过了，只能按关注项自己记下的死线排期，不能跟着当前阶段算
+            if (watch.DepositDeadline is { } deposit)
+            {
+                if (now >= deposit)
+                {
+                    watch.DepositDeadline = null;
+                    watchDirty = true;
+                }
+                else if (settings.NotifyDepositDeadline)
+                {
+                    foreach (var h in settings.LeadHours)
+                    {
+                        Add2(ReminderType.DepositDeadline, h, deposit.AddHours(-h), deposit, watch.Key.ToString(),
+                            "落选押金返还即将截止",
+                            $"{watch.DisplayName} 若你上轮落选，押金返还期限（公示期结束后 90 天）将于 " +
+                            $"{deposit.LocalDateTime:MM-dd HH:mm} 截止，逾期将不予返还！记得上线点门牌领回金币。");
+                    }
+                }
+            }
+
             var snapshot = _store.Get(watch.Key);
             if (snapshot == null) continue;
 
@@ -100,17 +122,14 @@ public class ReminderEngine
                                 "中签请立即购入，逾期将失去资格并被扣除 50% 申请金！");
                         }
                     }
-                    // 落选押金返还死线 = 公示期结束后 90 天（仅已报名）
-                    if (settings.NotifyDepositDeadline && watch.Mode == WatchMode.Participated)
+                    // 已报名的，把落选押金返还死线记在关注项上，房子下架后还能按它提醒
+                    if (watch.Mode == WatchMode.Participated)
                     {
                         var depositDeadline = phase.PhaseEnd.AddDays(90);
-                        foreach (var h in settings.LeadHours)
+                        if (watch.DepositDeadline != depositDeadline)
                         {
-                            Add(ReminderType.DepositDeadline, h, depositDeadline.AddHours(-h),
-                                depositDeadline, watch.Key.ToString(),
-                                "落选押金返还即将截止",
-                                $"{pos} 若你上轮落选，押金返还期限（公示期结束后 90 天）将于 " +
-                                $"{depositDeadline.LocalDateTime:MM-dd HH:mm} 截止，逾期将不予返还！记得上线点门牌领回金币。");
+                            watch.DepositDeadline = depositDeadline;
+                            watchDirty = true;
                         }
                     }
                     break;
@@ -188,6 +207,8 @@ public class ReminderEngine
                 Body = body
             });
         }
+
+        if (watchDirty) _config.Save();
 
         lock (_lock)
         {

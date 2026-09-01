@@ -17,6 +17,13 @@ public class WatchItem
     /// <summary>已触发过的提醒 Key，用于去重</summary>
     public HashSet<string> FiredReminders { get; set; } = [];
 
+    /// <summary>
+    /// 落选押金返还死线。公示期见到「已报名」时记在这里。
+    /// 死线在公示期结束后 90 天，那时房子早已从在售列表消失、阶段也不是公示期了，
+    /// 挂在当前阶段上算永远等不到，必须自己记住。
+    /// </summary>
+    public DateTimeOffset? DepositDeadline { get; set; }
+
     [JsonIgnore]
     public HouseKey Key => new(Server, Area, Slot, Id);
 

@@ -78,6 +78,12 @@ interface WatchItem {
   mode: 0 | 1;
   /** 已触发的提醒去重 key */
   fired: string[];
+  /**
+   * 落选押金返还死线（unix 秒）。公示期见到「已报名」时盖在关注项上。
+   * 死线在公示期结束后 90 天，那时房子早已从在售列表消失、阶段也不是公示期了，
+   * 挂在阶段上算永远等不到，必须自己记住。
+   */
+  depositDeadline?: number;
 }
 
 /** 我的房产（炸房提醒）：手动登记 + 进房打卡 */
@@ -110,9 +116,21 @@ function parseDayStart(date: string): { ts: number } | { error: string } {
   return { ts };
 }
 
+/** 分项提醒开关，缺省视为全开 */
+interface NotifyFlags {
+  entry: boolean;    // 申请期截止前（快去报名）
+  results: boolean;  // 开奖（进入公示期）
+  claim: boolean;    // 公示期截止前（中签确认归属死线）
+  deposit: boolean;  // 落选押金返还死线
+  next: boolean;     // 下轮申请期开始
+}
+const NOTIFY_ALL: NotifyFlags = { entry: true, results: true, claim: true, deposit: true, next: true };
+
 interface UserSub {
   chatId: number;
   leadHours: number[];
+  /** 分项提醒开关，未设置＝全开 */
+  notify?: NotifyFlags;
   items: WatchItem[];
   /** 我的房产（炸房提醒） */
   homes?: HomeEntry[];
@@ -777,14 +795,41 @@ async function runReminders(env: Env): Promise<void> {
       }
     }
 
+    const notify = sub.notify ?? NOTIFY_ALL;
+
     for (const w of sub.items) {
+      const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
+      const pos = `${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?'}]`;
+
+      // 落选押金返还：死线在公示期结束后 90 天，那时房子早已不在在售列表里，
+      // 所以这段必须走在下面的 `if (!house) continue` 之前，只认关注项自己记的死线
+      if (w.depositDeadline) {
+        if (nowSec >= w.depositDeadline) {
+          w.depositDeadline = undefined;   // 已到期，别再留着
+          dirty = true;
+        } else if (notify.deposit) {
+          for (const h of sub.leadHours) {
+            if (nowSec < w.depositDeadline - h * 3600) continue;
+            const key = `${w.server}:${w.area}:${w.slot}:${w.id}|5|${w.depositDeadline}|${h}`;
+            if (w.fired.includes(key)) continue;
+            w.fired.push(key);
+            if (w.fired.length > 50) w.fired.splice(0, w.fired.length - 50);
+            dirty = true;
+            due.push({
+              chatId: sub.chatId,
+              title: '💰 落选押金返还即将截止',
+              body: `${pos}\n若你上轮落选，押金返还期限（公示期结束后 ${DEPOSIT_DAYS} 天）将于 `
+                + `${fmtTime(w.depositDeadline)} 截止，逾期将不予返还！记得上线点门牌领回金币。`,
+            });
+          }
+        }
+      }
+
       const house = salesByServer.get(w.server)
         ?.find(h => h.Area === w.area && h.Slot === w.slot && h.ID === w.id);
       if (!house) continue;
 
       const phase = getPhase(house, nowSec);
-      const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
-      const pos = `${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?'}]`;
       const suffix = (phase.estimated ? '\n（推测数据，建议登录游戏复核）' : '')
         + (nowSec - house.LastSeen > 7200 ? '\n⚠ 数据已较久未更新，请以游戏内实际为准' : '');
 
@@ -804,33 +849,40 @@ async function runReminders(env: Env): Promise<void> {
 
       if (phase.state === 1) {
         if (w.mode === 0) {
-          for (const h of sub.leadHours) {
-            consider(0, h, phase.end - h * 3600, '⏰ 抽房报名即将截止',
-              `${pos}\n申请期将于 ${fmtTime(phase.end)} 截止，想去抽记得上线报名！`);
+          if (notify.entry) {
+            for (const h of sub.leadHours) {
+              consider(0, h, phase.end - h * 3600, '⏰ 抽房报名即将截止',
+                `${pos}
+申请期将于 ${fmtTime(phase.end)} 截止，想去抽记得上线报名！`);
+            }
           }
-        } else {
+        } else if (notify.results) {
           consider(1, null, phase.end, '🎉 抽房结果已公布',
-            `${pos}\n进入公示期，你参与抽签的房子开奖了，快去查看结果！`);
+            `${pos}
+进入公示期，你参与抽签的房子开奖了，快去查看结果！`);
         }
       } else if (phase.state === 2) {
         // 确认归属死线（两种模式都提醒）
-        for (const h of sub.leadHours) {
-          consider(2, h, phase.end - h * 3600, '⚠️ 公示期即将截止（确认归属死线）',
-            `${pos}\n公示期将于 ${fmtTime(phase.end)} 截止。中签请立即购入，逾期将失去资格并被扣除 50% 申请金！`);
+        if (notify.claim) {
+          for (const h of sub.leadHours) {
+            consider(2, h, phase.end - h * 3600, '⚠️ 公示期即将截止（确认归属死线）',
+              `${pos}
+公示期将于 ${fmtTime(phase.end)} 截止。中签请立即购入，逾期将失去资格并被扣除 50% 申请金！`);
+          }
         }
-        // 落选押金返还死线 = 公示期结束后 90 天（仅已报名）
+        // 已报名的，把落选押金返还死线记在关注项上；房子从在售列表消失后还能按它提醒
         if (w.mode === 1) {
           const depositEnd = phase.end + DEPOSIT_DAYS * 86400;
-          for (const h of sub.leadHours) {
-            consider(5, h, depositEnd - h * 3600, '💰 落选押金返还即将截止',
-              `${pos}\n若你上轮落选，押金返还期限（公示期结束后 ${DEPOSIT_DAYS} 天）将于 ${fmtTime(depositEnd)} 截止，逾期将不予返还！记得上线点门牌领回金币。`,
-              depositEnd);
+          if (w.depositDeadline !== depositEnd) {
+            w.depositDeadline = depositEnd;
+            dirty = true;
           }
         }
       } else if (phase.state === 3) {
-        if (w.mode === 0) {
+        if (w.mode === 0 && notify.next) {
           consider(3, null, phase.end, '🔔 新一轮抽签开始',
-            `${pos}\n预计于 ${fmtTime(phase.end)} 开放抽签预约，想去抽记得上线！`);
+            `${pos}
+预计于 ${fmtTime(phase.end)} 开放抽签预约，想去抽记得上线！`);
         }
       }
     }
@@ -933,6 +985,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const nowSec = Math.floor(Date.now() / 1000);
     return json({
       leadHours: sub.leadHours,
+      notify: sub.notify ?? NOTIFY_ALL,
       wxpusherSpt: sub.wxpusherSpt ?? '',
       nickname: sub.nickname ?? '',
       homes: (sub.homes ?? []).map(h => ({
@@ -992,6 +1045,26 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     item.fired = [];
     await saveSub(env, sub);
     return json({ ok: true, mode: item.mode });
+  }
+
+  // 分项提醒开关
+  if (path === '/api/notify' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; notify?: Partial<NotifyFlags> };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const inc = body.notify ?? {};
+    const sub2 = await getSub(env, chatId);
+    const cur = sub2.notify ?? NOTIFY_ALL;
+    const next: NotifyFlags = {
+      entry: typeof inc.entry === 'boolean' ? inc.entry : cur.entry,
+      results: typeof inc.results === 'boolean' ? inc.results : cur.results,
+      claim: typeof inc.claim === 'boolean' ? inc.claim : cur.claim,
+      deposit: typeof inc.deposit === 'boolean' ? inc.deposit : cur.deposit,
+      next: typeof inc.next === 'boolean' ? inc.next : cur.next,
+    };
+    sub2.notify = next;
+    await saveSub(env, sub2);
+    return json({ ok: true, notify: next });
   }
 
   if (path === '/api/lead' && request.method === 'POST') {
