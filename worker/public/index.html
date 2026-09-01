@@ -126,9 +126,12 @@
   .bind-box { padding: 14px; }
   /* 登记表单：字段宽度原来各写各的，排下来很零碎；统一成两列等宽网格 */
   .reg-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 7px 0 2px; }
-  .reg-form > * { margin: 0; min-width: 0; width: auto; }
+  /* 注意：属性选择器 input[type=text] 是 (0,1,1)，比 .reg-form > * 的 (0,1,0) 高，
+     必须写成同级选择器靠顺序压过去，否则输入框会带着 2px 外边距把整行顶歪 */
+  .reg-form input, .reg-form select, .reg-form button { margin: 0; min-width: 0; width: auto; }
   .reg-form > button { justify-content: center; }
-  .bind-box input { width: 100%; margin: 5px 0; }
+  /* 只给绑定面板那两个输入框用；登记表单也套了 .bind-box 当容器，别把它的网格顶歪 */
+  #bindPanel input { width: 100%; margin: 5px 0; }
   .lead-input { width: 90px; }
   /* ── 布局：窄屏单列（侧栏容器不参与布局，关注区照旧整页吸顶）── */
   .col-side { display: contents; }
