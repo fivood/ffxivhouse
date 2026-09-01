@@ -230,7 +230,7 @@
                 <TextBlock FontWeight="Bold" Foreground="#3a4a52">
                     <Run Text="{Binding HomesArrow, Mode=OneWay}"/>
                     <Run Text=" 我的房产"/>
-                    <Run Text="  45 天未进屋会拆除" FontWeight="Normal" Foreground="#8A8A80" FontSize="11"/>
+                    <Run Text="  45 天未进屋会拆除" FontWeight="Normal" Foreground="#4A5D66" FontSize="11"/>
                 </TextBlock>
             </Border>
             <Border Grid.Row="4" Background="White" BorderBrush="#ABABA0" BorderThickness="1,0,1,1"
@@ -304,21 +304,37 @@
                     <StackPanel Margin="8,7" >
                         <TextBlock FontSize="11" Foreground="#8A8A80"
                                    Text="登记我的房（登记即起算 45 天；多账号可登记多套，角色名做备注）："/>
-                        <WrapPanel Margin="0,5,0,3">
-                            <ComboBox Width="92" Margin="1" ItemsSource="{Binding Servers}"
+                        <!-- 字段宽度原来各写各的（92/94/42/42/70），排下来很零碎；改成两列等宽网格 -->
+                        <Grid Margin="0,6,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <ComboBox Grid.Row="0" Grid.Column="0" Margin="0,0,3,4"
+                                      ItemsSource="{Binding Servers}"
                                       SelectedItem="{Binding HomeServer}" DisplayMemberPath="Name"/>
-                            <ComboBox Width="94" Margin="1" SelectedIndex="{Binding HomeAreaIndex}">
+                            <ComboBox Grid.Row="0" Grid.Column="1" Margin="3,0,0,4"
+                                      SelectedIndex="{Binding HomeAreaIndex}">
                                 <ComboBoxItem Content="海雾村"/>
                                 <ComboBoxItem Content="薰衣草苗圃"/>
                                 <ComboBoxItem Content="高脚孤丘"/>
                                 <ComboBoxItem Content="白银乡"/>
                                 <ComboBoxItem Content="穹顶皓天"/>
                             </ComboBox>
-                            <TextBox Width="42" Margin="1" Text="{Binding HomeSlotText}" ToolTip="区号 1-30"/>
-                            <TextBox Width="42" Margin="1" Text="{Binding HomePlotText}" ToolTip="房号 1-60"/>
-                            <TextBox Width="70" Margin="1" Text="{Binding HomeLabelText}" ToolTip="角色名/备注"/>
-                            <Button Content="🏠 登记" Style="{StaticResource RetroBtn}" Command="{Binding AddHomeCommand}"/>
-                        </WrapPanel>
+                            <TextBox Grid.Row="1" Grid.Column="0" Margin="0,0,3,4"
+                                     Text="{Binding HomeSlotText}" ToolTip="区号 1-30"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Margin="3,0,0,4"
+                                     Text="{Binding HomePlotText}" ToolTip="房号 1-60"/>
+                            <TextBox Grid.Row="2" Grid.Column="0" Margin="0,0,3,0"
+                                     Text="{Binding HomeLabelText}" ToolTip="角色名/备注"/>
+                            <Button Grid.Row="2" Grid.Column="1" Margin="3,0,0,0" Content="🏠 登记"
+                                    Style="{StaticResource RetroBtn}" Command="{Binding AddHomeCommand}"/>
+                        </Grid>
                         <TextBlock Text="{Binding HomeHint}" Foreground="#B03030" FontSize="11" TextWrapping="Wrap"/>
                     </StackPanel>
                 </StackPanel>
@@ -339,7 +355,7 @@
                         <TextBlock FontWeight="Bold" Foreground="#55554A"
                                    DockPanel.Dock="Left" VerticalAlignment="Center">
                             <Run Text="⊙  在售房屋"/><Run Text="{Binding SalesCountText, Mode=OneWay}"
-                                 FontWeight="Normal" FontSize="11" Foreground="#8A8A80"/>
+                                 FontWeight="Normal" FontSize="11" Foreground="#4A5D66"/>
                         </TextBlock>
                         <ComboBox Width="118" Margin="1" HorizontalAlignment="Right" DockPanel.Dock="Right"
                                   SelectedIndex="{Binding SortIndex}" ToolTip="排序方式">

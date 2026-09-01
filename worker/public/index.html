@@ -37,6 +37,7 @@
   .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .title { font-weight: bold; font-size: 15px; }
   .meta { color: var(--dim); font-size: 12px; }
+  .strip .meta { color: #4A5D66; }   /* 蓝底上的次级文字，用 --dim 太浅 */
   .price { color: var(--amber); }
   .state { font-weight: bold; }
   .countdown { font-size: 13px; }
@@ -123,6 +124,10 @@
   .warn { color: var(--red); font-size: 12px; }
   .est { color: var(--dim); font-size: 12px; }
   .bind-box { padding: 14px; }
+  /* 登记表单：字段宽度原来各写各的，排下来很零碎；统一成两列等宽网格 */
+  .reg-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 7px 0 2px; }
+  .reg-form > * { margin: 0; min-width: 0; width: auto; }
+  .reg-form > button { justify-content: center; }
   .bind-box input { width: 100%; margin: 5px 0; }
   .lead-input { width: 90px; }
   /* ── 布局：窄屏单列（侧栏容器不参与布局，关注区照旧整页吸顶）── */
@@ -199,7 +204,7 @@
 <body>
 
 <div class="row">
-  <h1><img src="/icon-64.png" width="24" height="24" style="vertical-align:-4px;margin-right:4px">抽房了吗<span id="nickBadge" class="meta" style="margin-left:8px"></span></h1>
+  <h1><img src="/icon-64.png" width="32" height="32" style="vertical-align:-8px;margin-right:10px">抽房了吗<span id="nickBadge" class="meta" style="margin-left:10px"></span></h1>
   <button class="icon-btn plain" onclick="refreshAll()" title="重新拉取数据" aria-label="刷新">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><polyline points="21 3 21 9 15 9"/></svg>
@@ -266,15 +271,15 @@
     <div id="homeList"><div class="empty">暂无登记</div></div>
     <div class="bind-box" style="border-top:1px solid var(--bg)">
       <span class="meta">登记我的房（多账号可登记多套，角色名做备注）：</span>
-      <div class="row" style="flex-wrap:wrap">
-        <select id="homeServer" style="flex:1;min-width:90px"></select>
+      <div class="reg-form">
+        <select id="homeServer"></select>
         <select id="homeArea">
           <option value="0">海雾村</option><option value="1">薰衣草苗圃</option>
           <option value="2">高脚孤丘</option><option value="3">白银乡</option><option value="4">穹顶皓天</option>
         </select>
-        <input type="text" id="homeSlot" placeholder="区号" style="width:52px">
-        <input type="text" id="homePlot" placeholder="房号" style="width:52px">
-        <input type="text" id="homeLabel" placeholder="角色名" style="width:80px">
+        <input type="text" id="homeSlot" placeholder="区号">
+        <input type="text" id="homePlot" placeholder="房号">
+        <input type="text" id="homeLabel" placeholder="角色名">
         <button class="icon-btn" onclick="addHome()" title="登记房产">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           登记
