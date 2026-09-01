@@ -74,7 +74,10 @@
   }
   /* 房产操作区：窄屏自动换行不歪斜 */
   .home-actions, .card-actions { display: inline-flex; flex-wrap: wrap; gap: 5px;
-                  align-items: center; justify-content: flex-end; }
+                  align-items: stretch; justify-content: flex-end; }
+  /* iOS 上日期框会自己长个儿，压成标准盒模型才能和旁边按钮一样高 */
+  input[type=date] { -webkit-appearance: none; appearance: none; }
+  .home-actions > * { min-height: var(--ctl-h); }
   .home-actions { margin-top: 7px; }
   .home-actions input[type=date] { width: 118px; margin: 0; }
   .home-actions .lbl { display: none; }   /* 宽屏靠 title 提示，挤进一行 */
@@ -126,10 +129,10 @@
   /* 微信渠道折叠开关 */
   .wx-toggle {
     display: block; width: 100%; text-align: left; font-weight: bold;
-    background: #F4F4EC; border: none;
-    padding: 8px 10px; margin: 8px 0;
+    background: var(--strip); color: #3a4a52; border: none;
+    padding: 9px 10px; margin: 8px 0; height: auto;
   }
-  .wx-toggle:hover:not(:disabled) { background: #E7E7DE; }
+  .wx-toggle:hover:not(:disabled) { background: #aec8d1; }
   .footer { color: var(--dim); font-size: 11px; text-align: center; margin: 18px 0 10px; }
   .footer a { color: var(--link); }
   .footer a:hover { color: var(--link-hover); }
@@ -370,7 +373,10 @@
 <div id="pushModal" onclick="if (event.target === this) togglePush(false)">
   <div id="pushBox">
     <div class="strip"><span>⊙ 推送设置</span>
-      <button class="icon-btn" onclick="togglePush(false)">关闭</button></div>
+      <button class="icon-btn plain" onclick="togglePush(false)" title="关闭" aria-label="关闭">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button></div>
     <div id="pushBody">
 <!-- 推送设置（跟随关注区显示，但不吸顶） -->
 <div id="watchSection" style="display:none">
@@ -395,7 +401,7 @@
       <span class="meta" id="tgStatus"></span>
     </div>
     <button class="wx-toggle" id="barkToggle" onclick="toggleBark()">
-      <span id="barkArrow">▸</span> Bark 推送（可选，iOS）<span id="barkMiniStatus" style="color:var(--green)"></span>
+      <span id="barkArrow">▸</span> Bark 推送（iOS）<span id="barkMiniStatus" style="color:var(--green)"></span>
     </button>
     <div id="barkSection" style="display:none">
       <span class="meta">装 <a href="https://apps.apple.com/app/bark-customed-notifications/id1403753865" target="_blank">Bark</a>，把 App 里那串 key 粘进来，不用注册。<br>
@@ -409,7 +415,7 @@
       <span class="meta" id="barkStatus"></span>
     </div>
     <button class="wx-toggle" id="wxToggle" onclick="toggleWx()">
-      <span id="wxArrow">▸</span> 微信推送（可选，走 WxPusher APP）<span id="wxMiniStatus" style="color:var(--green)"></span>
+      <span id="wxArrow">▸</span> 微信推送（WxPusher）<span id="wxMiniStatus" style="color:var(--green)"></span>
     </button>
     <div id="wxSection" style="display:none">
       <span class="meta">扫码关注 WxPusher 公众号拿 SPT_ 令牌，粘到下方，再装
@@ -565,7 +571,7 @@ async function loadWatch() {
   $('watchSticky').style.display = 'block';
   $('watchSection').style.display = 'block';
   $('homeSection').style.display = 'block';
-  if (!authed()) { renderWatch(); renderHomes(); renderNotifyChips(); return; }   // 还没账号，先显示空状态
+  if (!authed()) { renderWatch(); renderHomes(); renderNotifyChips(); renderChips(); return; }   // 还没账号，先显示空状态
   try {
     const resp = await fetch(`/api/watch?${qs()}`);
     if (resp.status === 401) {
@@ -581,15 +587,15 @@ async function loadWatch() {
     renderHomes();
     $('homeSection').style.display = 'block';
     const isTg = /^\d+$/.test(cred.u);
-    $('tgMiniStatus').textContent = isTg ? ' ✅已绑定' : '';
+    $('tgMiniStatus').innerHTML = isTg ? ico('check') + '已绑定' : '';
     $('tgStatus').textContent = isTg ? '当前已绑定 Telegram' : '未绑定，当前用的是本机匿名账号';
     $('barkInput').value = data.barkKey || '';
-    $('barkStatus').textContent = data.barkKey ? '✅ Bark 推送已开启' : '';
-    $('barkMiniStatus').textContent = data.barkKey ? ' ✅已开启' : '';
+    $('barkStatus').innerHTML = data.barkKey ? ico('check') + ' Bark 推送已开启' : '';
+    $('barkMiniStatus').innerHTML = data.barkKey ? ico('check') + '已开启' : '';
     $('wxUidInput').value = data.wxpusherSpt || '';
-    $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
-    $('wxMiniStatus').textContent = data.wxpusherSpt ? ' ✅已开启' : '';
-    $('nickBadge').textContent = data.nickname ? `👋 ${data.nickname}` : '';
+    $('wxUidStatus').innerHTML = data.wxpusherSpt ? ico('check') + ' 微信推送已开启' : '';
+    $('wxMiniStatus').innerHTML = data.wxpusherSpt ? ico('check') + '已开启' : '';
+    $('nickBadge').textContent = data.nickname || '';
 
     $('watchSection').style.display = 'block';
     $('watchSticky').style.display = 'block';
@@ -613,7 +619,7 @@ const URGENCY = t => {
   const span = t - Date.now() / 1000;
   return span <= 3600 ? '#B03030' : span <= 86400 ? '#B06030' : '#3F3F38';
 };
-const REGION = { 1: '部队', 2: '个人' };
+const REGION = { 1: '部队', 2: '个人' };   // 0 是上游没文档化的值，按未知处理
 
 // ── 图标：线条图，跟随按钮字色 ──
 const ICONS = {
@@ -628,6 +634,8 @@ const ICONS = {
   zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
   undo: '<path d="M3 12a9 9 0 1 0 2.6-6.4"/><polyline points="3 3 3 9 9 9"/>',
   flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
+  warn: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>' +
+        '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
 };
 const ico = n => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
   `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
@@ -654,8 +662,8 @@ function renderWatch() {
             : `<span class="badge">${w.mode === 1 ? '已报名' : '计划抽'}</span>`}
           <button class="icon-btn" onclick="unwatch('${watchKey(w)}')" title="移除关注" aria-label="移除关注">${ico('trash')}</button>
         </span></div>
-      <div>${state}${cd}${w.stale ? ' <span class="warn">⚠ 数据较旧</span>' : ''}</div>
-      <div class="meta">${(w.price || 0).toLocaleString()} 金币 · ${PTYPE[w.purchaseType] || ''} · ${REGION[w.regionType] || ''}</div>
+      <div>${state}${cd}${w.stale ? ` <span class="warn">${ico('warn')} 数据较旧</span>` : ''}</div>
+      <div class="meta">${(w.price || 0).toLocaleString()} 金币 · ${PTYPE[w.purchaseType] || ''} · ${REGION[w.regionType] || '用途未知'}</div>
     </div>`;
   }).join('');
 }
@@ -722,9 +730,9 @@ function renderSales() {
       <div class="row"><span class="title">${h.areaName} ${h.slotNo}区 ${h.id}号 [${h.size}]</span>
         <button class="watch-btn" ${isW ? 'disabled' : ''} onclick="watch('${key}')">${ico(isW ? 'check' : 'plus')}${isW ? '已关注' : '关注'}</button></div>
       <div><span class="price">${h.price.toLocaleString()} 金币</span>
-        <span class="badge"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] || ''}${h.state === 1 ? ` · ${h.participate}人参与` : ''}</span></div>
+        <span class="badge"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] || '用途未知'}${h.state === 1 ? ` · ${h.participate}人参与` : ''}</span></div>
       <div>${state} <span class="countdown" style="color:${URGENCY(h.phaseEnd)}">${fmtRemain(h.phaseEnd)}</span>
-        ${h.stale ? ' <span class="warn">⚠ 数据较旧</span>' : ''}</div>
+        ${h.stale ? ` <span class="warn">${ico('warn')} 数据较旧</span>` : ''}</div>
     </div>`;
   }).join('') : '<div class="empty">没有符合条件的在售房屋</div>';
 }
@@ -746,7 +754,7 @@ function renderHomes() {
       let status;
       if (h.demolishedAt > 0) {
         const d = Math.floor((h.furnitureDeadline - Date.now() / 1000) / 86400);
-        status = `<span style="color:${d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : '#7B5EA7'};font-weight:bold">💥 已炸房，资产回收${d >= 0 ? `还剩 ${d} 天` : '已到期！'}</span>` +
+        status = `<span style="color:${d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : '#7B5EA7'};font-weight:bold">${ico('zap')} 已炸房，资产回收${d >= 0 ? `还剩 ${d} 天` : '已到期！'}</span>` +
           ` <span class="meta">${fmtDate(h.furnitureDeadline)} 到期</span>`;
       } else if (h.lastEnteredAt <= 0) {
         status = '<span class="est">进屋时间未知，进屋后打卡</span>';
@@ -952,8 +960,8 @@ async function saveBark() {
   const resp = await api('POST', '/api/bark', { key: $('barkInput').value.trim() });
   const data = await resp.json();
   if (resp.ok) {
-    $('barkStatus').textContent = data.barkKey ? '✅ Bark 推送已开启' : '已关闭 Bark 推送';
-    $('barkMiniStatus').textContent = data.barkKey ? ' ✅已开启' : '';
+    $('barkStatus').innerHTML = data.barkKey ? ico('check') + ' Bark 推送已开启' : '已关闭 Bark 推送';
+    $('barkMiniStatus').innerHTML = data.barkKey ? ico('check') + '已开启' : '';
     toast('已保存');
   } else {
     toast(data.error || '保存失败');
@@ -975,8 +983,8 @@ async function saveWxUid() {
   const resp = await api('POST', '/api/wxpusher', { spt: $('wxUidInput').value.trim() });
   const data = await resp.json();
   if (resp.ok) {
-    $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '已关闭微信推送';
-    $('wxMiniStatus').textContent = data.wxpusherSpt ? ' ✅已开启' : '';
+    $('wxUidStatus').innerHTML = data.wxpusherSpt ? ico('check') + ' 微信推送已开启' : '已关闭微信推送';
+    $('wxMiniStatus').innerHTML = data.wxpusherSpt ? ico('check') + '已开启' : '';
     toast('已保存');
   } else {
     toast(data.error || '保存失败');
