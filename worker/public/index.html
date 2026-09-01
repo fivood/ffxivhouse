@@ -184,8 +184,9 @@
   #mapBox { line-height: 0; }
   #mapBox svg { display: block; width: 100%; height: auto; background: #F7F7F0; }
   #mapBox .plot { fill: rgba(0,0,0,0); stroke: #7A7A6C; stroke-width: 1; stroke-dasharray: 4 4; }
-  /* 在售＝空地（橙），其余＝已住人（灰）；没有在售数据时两个都不加 */
-  #mapBox .plot.free { fill: rgba(166,106,0,.34); stroke: #A66A00; stroke-dasharray: none; }
+  /* 三档：可抽（橙实）／空置未开放（白，公示期或准备期，人已经搬走了但抽不了）／已住人（灰） */
+  #mapBox .plot.free { fill: rgba(166,106,0,.38); stroke: #A66A00; stroke-dasharray: none; }
+  #mapBox .plot.empty { fill: rgba(255,255,255,.5); stroke: #A66A00; }
   #mapBox .plot.taken { fill: rgba(55,55,48,.38); }
   #mapBox .plot:hover { fill: rgba(45,140,157,.22); }
   #mapBox .plot.on { fill: rgba(45,140,157,.42); stroke: #14545e; stroke-width: 4; stroke-dasharray: none; }
@@ -288,7 +289,8 @@
   <div class="panel" id="mapPanel" data-fold="map">
     <div id="mapBox"></div>
     <div id="mapHint"><span id="mapCount"></span><br>
-      <span style="color:#A66A00">■</span> 在售（空地）　<span style="color:#6b6b60">■</span> 已住人　
+      <span style="color:#A66A00">■</span> 可抽　<span style="color:#c9a86a">□</span> 空置未开放　
+      <span style="color:#6b6b60">■</span> 已住人<br>
       滑过房屋卡片即高亮。上方为北，各小区布局相同。</div>
   </div>
 </div>
@@ -975,25 +977,29 @@ function drawMap(hitId) {
     const x0 = cx - MAP_SPAN / 2, z0 = cz - MAP_SPAN / 2, vw = MAP_SPAN, vh = MAP_SPAN;
     // 售楼中心只给「在售」的房；同一小区里没出现的就是已经有人住了。
     // 一条数据都没有时（还没加载 / 该服无上报）不判断，免得整区错标成住满
-    const onSale = new Set(sales
+    // 出现在列表里就说明没人住；其中只有申请期且可购买的才真能去抽，
+    // 公示期（等开奖）和准备期（刚炸完等下轮）是空房但抽不了
+    const listed = new Map(sales
       .filter(h => h.server === srv && h.area === area && h.slot === slot)
-      .map(h => h.id));
+      .map(h => [h.id, h.state === 1 && (h.purchaseType === 1 || h.purchaseType === 2)]));
     const known = sales.length > 0;
-    let freeCount = 0;
+    let freeCount = 0, emptyCount = 0;
 
     const cells = list.map(([x, z, r], i) => {
       const no = half * 30 + i + 1;
-      const free = onSale.has(no);
-      if (free) freeCount++;
-      const cls = known ? (free ? ' free' : ' taken') : '';
-      return `<rect class="plot${cls}" data-no="${no}" x="${x - r}" y="${z - r}"` +
+      const buyable = listed.get(no);            // undefined = 不在列表 = 有人住
+      const state = buyable === undefined ? 'taken' : buyable ? 'free' : 'empty';
+      if (state === 'free') freeCount++;
+      if (state === 'empty') emptyCount++;
+      const tip = { free: ' · 可抽', empty: ' · 空置（未开放）', taken: ' · 已住人' }[state];
+      return `<rect class="plot${known ? ' ' + state : ''}" data-no="${no}" x="${x - r}" y="${z - r}"` +
         ` width="${2 * r}" height="${2 * r}"><title>${no}号 [${SIZE_OF(r)}]` +
-        `${known ? (free ? ' · 在售' : ' · 已住人') : ''}</title></rect>` +
+        `${known ? tip : ''}</title></rect>` +
         `<text class="plot-no" x="${x}" y="${z + 5}">${no}</text>`;
     }).join('');
 
     $('mapCount').textContent = known
-      ? `这半个小区 30 块地，在售 ${freeCount} 块`
+      ? `这半个小区 30 块地：可抽 ${freeCount}，空置未开放 ${emptyCount}`
       : '在售数据加载中…';
     // 扩建区没有单独的图：主城区那张顺时针转 90° 再平移即可
     $('mapBox').innerHTML = `<svg viewBox="${x0} ${z0} ${vw} ${vh}">` +

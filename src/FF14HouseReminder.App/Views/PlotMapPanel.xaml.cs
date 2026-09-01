@@ -17,9 +17,10 @@ public partial class PlotMapPanel : UserControl
     private static readonly Brush HitStroke = Freeze(new SolidColorBrush(Color.FromRgb(0x14, 0x54, 0x5E)));
     private static readonly Brush HitFill = Freeze(new SolidColorBrush(Color.FromArgb(0x6B, 0x2D, 0x8C, 0x9D)));
     private static readonly Brush LabelBg = Freeze(new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)));
-    // 在售＝空地（橙），已住人（灰）
-    private static readonly Brush FreeFill = Freeze(new SolidColorBrush(Color.FromArgb(0x57, 0xA6, 0x6A, 0x00)));
+    // 三档：可抽（橙实）／空置未开放（白，公示期或准备期）／已住人（灰）
+    private static readonly Brush FreeFill = Freeze(new SolidColorBrush(Color.FromArgb(0x61, 0xA6, 0x6A, 0x00)));
     private static readonly Brush FreeStroke = Freeze(new SolidColorBrush(Color.FromRgb(0xA6, 0x6A, 0x00)));
+    private static readonly Brush EmptyFill = Freeze(new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF)));
     private static readonly Brush TakenFill = Freeze(new SolidColorBrush(Color.FromArgb(0x61, 0x37, 0x37, 0x30)));
 
     private static Brush Freeze(SolidColorBrush b) { b.Freeze(); return b; }
@@ -29,11 +30,14 @@ public partial class PlotMapPanel : UserControl
 
     public event Action? RequestClose;
 
+    /// <summary>某小区的空置情况：能去抽的房号 / 空着但还不能抽的房号（公示期、准备期）</summary>
+    public record WardPlots(HashSet<int> Buyable, HashSet<int> Empty);
+
     /// <summary>
-    /// 取某小区正在售的房号。售楼中心只给在售的房，没出现的就是已经有人住了；
-    /// 返回 null 表示没有数据（还没加载/该服无上报），这时不做空置判断。
+    /// 取某小区的空置情况。售楼中心只给没人住的房，没出现的就是已经有人住了；
+    /// 返回 null 表示没有数据（还没加载/该服无上报），这时不做判断。
     /// </summary>
-    public Func<int, int, HashSet<int>?>? OnSaleLookup;
+    public Func<int, int, WardPlots?>? OnSaleLookup;
 
     public PlotMapPanel()
     {
@@ -94,10 +98,12 @@ public partial class PlotMapPanel : UserControl
             else
             {
                 // 恢复成空置底色（Build 时算好的，存在 Tag 里）
-                _cells[i].Fill = _cells[i].Tag as Brush ?? Brushes.Transparent;
-                _cells[i].Stroke = ReferenceEquals(_cells[i].Tag, FreeFill) ? FreeStroke : CellStroke;
+                var back = _cells[i].Tag as Brush;
+                var isLand = ReferenceEquals(back, FreeFill) || ReferenceEquals(back, EmptyFill);
+                _cells[i].Fill = back ?? Brushes.Transparent;
+                _cells[i].Stroke = isLand ? FreeStroke : CellStroke;
                 _cells[i].StrokeThickness = 1;
-                _cells[i].StrokeDashArray = ReferenceEquals(_cells[i].Tag, FreeFill) ? null : new DoubleCollection { 4, 4 };
+                _cells[i].StrokeDashArray = ReferenceEquals(back, FreeFill) ? null : new DoubleCollection { 4, 4 };
             }
         }
     }
@@ -105,8 +111,8 @@ public partial class PlotMapPanel : UserControl
     private void Build(int area, int half, int slot)
     {
         var ward = HousingMap.Ward(area, half);
-        var onSale = OnSaleLookup?.Invoke(area, slot);
-        var free = 0;
+        var occ = OnSaleLookup?.Invoke(area, slot);
+        int free = 0, empty = 0;
         // 十张图共用同一个正方形取景框：各房区跨度 201~367、宽高比 0.58~1.73，
         // 各裁各的会让切换房区时缩放忽大忽小（网页端还会顶得下面的列表乱跳）
         var cx = (ward.Min(p => p.X) + ward.Max(p => p.X)) / 2.0;
@@ -138,15 +144,18 @@ public partial class PlotMapPanel : UserControl
             var (x, z, w) = ward[i];
             var no = half * 30 + i + 1;
 
-            var isFree = onSale?.Contains(no) ?? false;
+            var isFree = occ?.Buyable.Contains(no) ?? false;
+            var isEmpty = occ?.Empty.Contains(no) ?? false;
             if (isFree) free++;
+            if (isEmpty) empty++;
             var cell = new Rectangle
             {
                 Width = w * 2,
                 Height = w * 2,
-                Fill = onSale == null ? Brushes.Transparent : isFree ? FreeFill : TakenFill,
+                Fill = occ == null ? Brushes.Transparent
+                     : isFree ? FreeFill : isEmpty ? EmptyFill : TakenFill,
                 ToolTip = $"{no} 号 [{HousingMap.SizeOf(w)}]"
-                          + (onSale == null ? "" : isFree ? " · 在售" : " · 已住人")
+                          + (occ == null ? "" : isFree ? " · 可抽" : isEmpty ? " · 空置（未开放）" : " · 已住人")
             };
             cell.MouseEnter += (_, _) => { _hit = no; Draw(); };
             Canvas.SetLeft(cell, x - w - x0);
@@ -171,8 +180,8 @@ public partial class PlotMapPanel : UserControl
             MapCanvas.Children.Add(label);
         }
 
-        CountText.Text = onSale == null
+        CountText.Text = occ == null
             ? "在售数据加载中…"
-            : $"这半个小区 30 块地，在售 {free} 块";
+            : $"这半个小区 30 块地：可抽 {free}，空置未开放 {empty}";
     }
 }

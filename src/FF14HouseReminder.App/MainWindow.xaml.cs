@@ -48,8 +48,16 @@ public partial class MainWindow : Window
             if (server == 0) return null;
             var sales = App.Store.GetServerSales(server);
             if (sales.Count == 0) return null;   // 该服还没数据，不做判断
-            return sales.Where(s => s.Data.Area == area && s.Data.Slot == slot)
-                        .Select(s => s.Data.ID).ToHashSet();
+            var now = DateTimeOffset.Now;
+            var ward = sales.Where(s => s.Data.Area == area && s.Data.Slot == slot).ToList();
+            // 在列表里就说明没人住；只有申请期且可购买的才真能去抽，
+            // 公示期（等开奖）和准备期（刚炸完等下轮）是空房但抽不了
+            bool Buyable(Models.HouseSnapshot s) =>
+                Services.LotteryCycle.GetPhase(s.Data, now).State == Models.LotteryState.Available
+                && s.Data.PurchaseType is (int)Models.PurchaseType.Lottery or (int)Models.PurchaseType.FCFS;
+            return new Views.PlotMapPanel.WardPlots(
+                ward.Where(Buyable).Select(s => s.Data.ID).ToHashSet(),
+                ward.Where(s => !Buyable(s)).Select(s => s.Data.ID).ToHashSet());
         };
         // 拉到新数据后重画（空置标记跟着变）
         App.Store.DataUpdated += () => Dispatcher.Invoke(() =>
