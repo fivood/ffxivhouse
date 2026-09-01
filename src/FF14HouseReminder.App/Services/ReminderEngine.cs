@@ -19,6 +19,22 @@ public class ReminderEngine
     /// <summary>炸房提醒提前量（天）</summary>
     private static readonly int[] DemolitionLeadDays = [10, 5, 1];
 
+    /// <summary>
+    /// 当前落在哪一档提前量里（最多一档）。
+    /// 补签一个很旧的进屋日期时实际只剩 5 天，不该先冒出一条「还剩 10 天」。
+    /// </summary>
+    private static IEnumerable<int> CurrentLeadLevel(DateTimeOffset deadline, DateTimeOffset now)
+    {
+        for (var i = 0; i < DemolitionLeadDays.Length; i++)
+        {
+            var from = deadline.AddDays(-DemolitionLeadDays[i]);
+            var to = i + 1 < DemolitionLeadDays.Length
+                ? deadline.AddDays(-DemolitionLeadDays[i + 1])
+                : deadline;
+            if (now >= from && now < to) yield return DemolitionLeadDays[i];
+        }
+    }
+
     public ReminderEngine(ConfigService config, DataStore store, PushService push, TaskSchedulerSync taskSync)
     {
         _config = config;
@@ -72,10 +88,12 @@ public class ReminderEngine
 
             void Add(ReminderType type, int? leadHours, DateTimeOffset fireAt, DateTimeOffset anchorEnd, string keyPrefix, string title, string body)
             {
-                // 提前量早于现在但阶段尚未结束：立即提醒一次（用户新关注时常见）
-                if (fireAt <= now && anchorEnd > now) fireAt = now;
+                // 提前量早于现在但阶段尚未结束：立即提醒一次（用户新关注时常见）。
+                // 去重位统一写 now——否则 24h/1h 都已过时会在同一刻弹出两条一模一样的
+                var leadKey = leadHours?.ToString() ?? "x";
+                if (fireAt <= now && anchorEnd > now) { fireAt = now; leadKey = "now"; }
                 if (fireAt <= now.AddSeconds(-60)) return; // 阶段已过的不再排期
-                var key = $"{keyPrefix}|{(int)type}|{anchorEnd:yyyyMMddHHmmss}|{leadHours?.ToString() ?? "x"}";
+                var key = $"{keyPrefix}|{(int)type}|{anchorEnd:yyyyMMddHHmmss}|{leadKey}";
                 list.Add(new ScheduledReminder
                 {
                     Key = key,
@@ -100,16 +118,27 @@ public class ReminderEngine
                                 $"{pos} 申请期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止，想去抽记得上线报名！");
                         }
                     }
-                    if (settings.NotifyResultsStart && watch.Mode == WatchMode.Participated)
+                    // 新一轮开抽：挂在申请期开始那一刻。挂在上一阶段结束的话，
+                    // 到点时 GetPhase 已经翻页到申请期，原分支再也进不去，等于永远发不出
+                    if (settings.NotifyNextEntryStart && watch.Mode == WatchMode.Planned)
                     {
-                        Add(ReminderType.ResultsStart, null, phase.PhaseEnd,
+                        Add(ReminderType.NextEntryStart, null, phase.PhaseEnd.AddDays(-LotteryCycle.EntryDays),
                             phase.PhaseEnd, watch.Key.ToString(),
-                            "抽房结果已公布",
-                            $"{pos} 进入公示期，你参与抽签的房子开奖了，快去查看结果！");
+                            "新一轮抽签开始",
+                            $"{pos} 已开放抽签预约，申请期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止，想去抽记得上线报名！");
                     }
                     break;
 
                 case LotteryState.ResultsPeriod:
+                    // 开奖：申请期一结束就进公示期，挂在公示期开始那一刻发
+                    if (settings.NotifyResultsStart && watch.Mode == WatchMode.Participated)
+                    {
+                        Add(ReminderType.ResultsStart, null, phase.PhaseEnd.AddDays(-LotteryCycle.ResultsDays),
+                            phase.PhaseEnd, watch.Key.ToString(),
+                            "抽房结果已公布",
+                            $"{pos} 已进入公示期，你参与抽签的房子开奖了，快去查看结果！" +
+                            $"公示期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止。");
+                    }
                     // 确认归属死线对两种关注模式都提醒：已报名要去看结果/购入，计划抽也该知道本轮结果
                     if (settings.NotifyClaimDeadline)
                     {
@@ -135,13 +164,7 @@ public class ReminderEngine
                     break;
 
                 case LotteryState.Preparing:
-                    if (settings.NotifyNextEntryStart && watch.Mode == WatchMode.Planned)
-                    {
-                        Add(ReminderType.NextEntryStart, null, phase.PhaseEnd,
-                            phase.PhaseEnd, watch.Key.ToString(),
-                            "新一轮抽签开始",
-                            $"{pos} 预计于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 开放抽签预约，想去抽记得上线！");
-                    }
+                    // 「新一轮开抽」在申请期分支里发（见上），这里不排
                     break;
             }
         }
@@ -156,7 +179,7 @@ public class ReminderEngine
             if (home.DemolishedAt > 0)
             {
                 var furnitureDeadline = home.FurnitureDeadline;
-                foreach (var days in DemolitionLeadDays)
+                foreach (var days in CurrentLeadLevel(furnitureDeadline, now))
                 {
                     Add2(ReminderType.FurnitureDeadline, days, furnitureDeadline.AddDays(-days), furnitureDeadline, homeKey,
                         $"旧家具保管即将到期：还剩 {days} 天",
@@ -175,7 +198,7 @@ public class ReminderEngine
             if (home.LastEnteredAt <= 0) continue;
             var deadline = home.Deadline;
 
-            foreach (var days in DemolitionLeadDays)
+            foreach (var days in CurrentLeadLevel(deadline, now))
             {
                 Add2(ReminderType.Demolition, days, deadline.AddDays(-days), deadline, homeKey,
                     $"炸房警告：还剩 {days} 天",

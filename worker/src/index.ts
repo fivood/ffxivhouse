@@ -736,9 +736,14 @@ async function runReminders(env: Env): Promise<void> {
       // 已炸房：旧家具保管 35 天死线
       if (h.demolishedAt && h.demolishedAt > 0) {
         const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
-        for (const days of DEMOLITION_LEAD_DAYS) {
+        // 同上：只发当前所处的那一档（补的炸房日期很旧时，别先发一条过时的「还剩 10 天」）
+        for (let i = 0; i < DEMOLITION_LEAD_DAYS.length; i++) {
+          const days = DEMOLITION_LEAD_DAYS[i];
           const fireSec = fDeadline - days * 86400;
-          if (nowSec < fireSec || nowSec >= fDeadline) continue;
+          const upper = i + 1 < DEMOLITION_LEAD_DAYS.length
+            ? fDeadline - DEMOLITION_LEAD_DAYS[i + 1] * 86400
+            : fDeadline;
+          if (nowSec < fireSec || nowSec >= upper) continue;
           const key = `furn|${fDeadline}|${days}`;
           if (h.fired.includes(key)) continue;
           h.fired.push(key);
@@ -766,9 +771,14 @@ async function runReminders(env: Env): Promise<void> {
       if (h.lastEnteredAt <= 0) continue;
       const deadlineSec = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
 
-      for (const days of DEMOLITION_LEAD_DAYS) {
+      // 只发当前所处的那一档：补签一个很旧的进屋日期时，剩 5 天却先发一条「还剩 10 天」是错的
+      for (let i = 0; i < DEMOLITION_LEAD_DAYS.length; i++) {
+        const days = DEMOLITION_LEAD_DAYS[i];
         const fireSec = deadlineSec - days * 86400;
-        if (nowSec < fireSec || nowSec >= deadlineSec) continue;
+        const upper = i + 1 < DEMOLITION_LEAD_DAYS.length
+          ? deadlineSec - DEMOLITION_LEAD_DAYS[i + 1] * 86400
+          : deadlineSec;
+        if (nowSec < fireSec || nowSec >= upper) continue;
         const key = `demo|${deadlineSec}|${days}`;
         if (h.fired.includes(key)) continue;
         h.fired.push(key);
@@ -835,11 +845,13 @@ async function runReminders(env: Env): Promise<void> {
 
       const consider = (type: number, leadH: number | null, fireAtSec: number, title: string, body: string, anchorSec?: number) => {
         const anchor = anchorSec ?? phase.end;
-        // 提前量已过但阶段未结束：立即提醒一次
+        // 提前量已过但阶段未结束：立即补发一次。
+        // 去重位统一写成 now——否则 24h/1h 两个提前量都已过时会在同一秒发出两条一模一样的
         let fire = fireAtSec;
-        if (fire <= nowSec && anchor > nowSec) fire = nowSec;
+        let leadKey: string = `${leadH ?? 'x'}`;
+        if (fire <= nowSec && anchor > nowSec) { fire = nowSec; leadKey = 'now'; }
         if (fire > nowSec) return; // 未到时间
-        const key = `${w.server}:${w.area}:${w.slot}:${w.id}|${type}|${anchor}|${leadH ?? 'x'}`;
+        const key = `${w.server}:${w.area}:${w.slot}:${w.id}|${type}|${anchor}|${leadKey}`;
         if (w.fired.includes(key)) return;
         w.fired.push(key);
         if (w.fired.length > 50) w.fired.splice(0, w.fired.length - 50);
@@ -848,6 +860,12 @@ async function runReminders(env: Env): Promise<void> {
       };
 
       if (phase.state === 1) {
+        // 新一轮开抽：挂在申请期开始那一刻发，同样不能挂在上一阶段的结束
+        if (w.mode === 0 && notify.next) {
+          consider(3, null, phase.end - ENTRY_SEC, '🔔 新一轮抽签开始',
+            `${pos}
+已开放抽签预约，申请期将于 ${fmtTime(phase.end)} 截止，想去抽记得上线报名！`);
+        }
         if (w.mode === 0) {
           if (notify.entry) {
             for (const h of sub.leadHours) {
@@ -856,12 +874,16 @@ async function runReminders(env: Env): Promise<void> {
 申请期将于 ${fmtTime(phase.end)} 截止，想去抽记得上线报名！`);
             }
           }
-        } else if (notify.results) {
-          consider(1, null, phase.end, '🎉 抽房结果已公布',
-            `${pos}
-进入公示期，你参与抽签的房子开奖了，快去查看结果！`);
         }
       } else if (phase.state === 2) {
+        // 开奖：申请期一结束就进公示期，挂在公示期开始那一刻发（挂在阶段结束发永远等不到）
+        if (w.mode === 1 && notify.results) {
+          consider(1, null, phase.end - RESULTS_SEC, '🎉 抽房结果已公布',
+            `${pos}
+已进入公示期，你参与抽签的房子开奖了，快去查看结果！`
+            + `
+公示期将于 ${fmtTime(phase.end)} 截止。`);
+        }
         // 确认归属死线（两种模式都提醒）
         if (notify.claim) {
           for (const h of sub.leadHours) {
@@ -877,12 +899,6 @@ async function runReminders(env: Env): Promise<void> {
             w.depositDeadline = depositEnd;
             dirty = true;
           }
-        }
-      } else if (phase.state === 3) {
-        if (w.mode === 0 && notify.next) {
-          consider(3, null, phase.end, '🔔 新一轮抽签开始',
-            `${pos}
-预计于 ${fmtTime(phase.end)} 开放抽签预约，想去抽记得上线！`);
         }
       }
     }

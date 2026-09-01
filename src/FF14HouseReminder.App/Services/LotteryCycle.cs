@@ -15,6 +15,11 @@ public static class LotteryCycle
     private static readonly long EntrySec = 5 * 86400;   // 申请期时长
     private static readonly long ResultsSec = 4 * 86400; // 公示期时长
 
+    /// <summary>申请期天数</summary>
+    public const int EntryDays = 5;
+    /// <summary>公示期天数</summary>
+    public const int ResultsDays = 4;
+
     public readonly record struct PhaseInfo(LotteryState State, DateTimeOffset PhaseEnd, bool Estimated);
 
     /// <summary>获取房屋当前所处阶段与阶段结束时间。</summary>
