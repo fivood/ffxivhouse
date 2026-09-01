@@ -21,8 +21,15 @@
         <local:InverseBoolConverter x:Key="InverseBool"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
+        <!-- 一行里混着按钮、下拉、日期框、输入框，高度统一才不会高低不齐
+             （默认分别是 26 / 21.2 / 24 / 17.2） -->
+        <Style TargetType="ComboBox"><Setter Property="Height" Value="26"/></Style>
+        <Style TargetType="TextBox"><Setter Property="Height" Value="26"/></Style>
+        <Style TargetType="DatePicker"><Setter Property="Height" Value="26"/></Style>
+
         <!-- 复古方形按钮 -->
         <Style TargetType="Button" x:Key="RetroBtn">
+            <Setter Property="Height" Value="26"/>
             <Setter Property="Background" Value="#F2F2EB"/>
             <Setter Property="Foreground" Value="#3F3F38"/>
             <Setter Property="BorderBrush" Value="#ABABA0"/>
@@ -252,20 +259,20 @@
                                                     DisplayDateEnd="{Binding DataContext.Today,
                                                         RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                     ToolTip="日期：补签进屋日 / 标记炸房日都用它，留空按今天算"/>
-                                        <Button Content="🗓 补签" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                        <Button Content="🗓" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
                                                 Visibility="{Binding NotDemolished, Converter={StaticResource BoolToVis}}"
                                                 ToolTip="按所选日期补签"
                                                 Command="{Binding DataContext.BackfillHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
-                                        <Button Content="🗓 改炸房日" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
+                                        <Button Content="📅" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
                                                 Visibility="{Binding Demolished, Converter={StaticResource BoolToVis}}"
                                                 ToolTip="按所选日期更正炸房日"
                                                 Command="{Binding DataContext.SetDemolishDateCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
                                         <Button Content="{Binding DemolishText}" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
-                                                ToolTip="房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算（再点取消）"
+                                                ToolTip="{Binding DemolishTip}"
                                                 Command="{Binding DataContext.DemolishHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>

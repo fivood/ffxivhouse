@@ -115,7 +115,11 @@ public partial class HomeViewModel : ObservableObject
     public string PositionText => Item.PositionText;
     public string Label => Item.Label;
     /// <summary>炸房按钮文案（再点一次取消）</summary>
-    public string DemolishText => Item.DemolishedAt > 0 ? "↺ 取消炸房" : "💥 我房炸了";
+    // 操作行要挤进一行，次要按钮只留图标，说明交给 ToolTip
+    public string DemolishText => Item.DemolishedAt > 0 ? "↺" : "💥";
+    public string DemolishTip => Item.DemolishedAt > 0
+        ? "房子还在？取消炸房标记"
+        : "房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算";
     /// <summary>没炸房时才显示打卡/补签</summary>
     public bool NotDemolished => Item.DemolishedAt <= 0;
     public bool Demolished => Item.DemolishedAt > 0;
@@ -153,6 +157,7 @@ public partial class HomeViewModel : ObservableObject
     private void NotifyDemolishState()
     {
         OnPropertyChanged(nameof(DemolishText));
+        OnPropertyChanged(nameof(DemolishTip));
         OnPropertyChanged(nameof(NotDemolished));
         OnPropertyChanged(nameof(Demolished));
     }

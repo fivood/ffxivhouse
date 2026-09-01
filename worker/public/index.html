@@ -12,6 +12,7 @@
     --link: #2d8c9d; --link-hover: #2bb1be;
     --green: #4C7A34; --amber: #A66A00; --blue: #3B5BA5; --red: #B03030; --orange: #B06030;
     --purple: #7B5EA7;
+    --ctl-h: 30px;          /* 按钮/下拉/输入框统一高度，窄屏放大成手指目标 */
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   a { color: var(--link); }
@@ -39,6 +40,9 @@
   .state { font-weight: bold; }
   .countdown { font-size: 13px; }
   .badge { font-size: 11px; color: var(--dim); }
+  /* 一行里混着按钮、下拉、日期框，高度统一才不会高低不齐 */
+  button, select, input[type=text], input[type=date] { height: var(--ctl-h); box-sizing: border-box; }
+  .wx-toggle, .fold { height: auto; }
   button {
     background: #F2F2EB; border: 1px solid var(--border); color: var(--text);
     padding: 6px 12px; font-size: 13px; line-height: 1.3; cursor: pointer; font-family: inherit;
@@ -62,6 +66,9 @@
   .home-actions, .card-actions { display: inline-flex; flex-wrap: wrap; gap: 5px;
                   align-items: center; justify-content: flex-end; }
   .home-actions { margin-top: 7px; }
+  .home-actions input[type=date] { width: 118px; margin: 0; }
+  .home-actions .lbl { display: none; }   /* 宽屏靠 title 提示，挤进一行 */
+  .home-actions .btn-danger { color: var(--red); }
   .filters { background: var(--strip); border: 1px solid var(--border); border-top: none;
              display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; }
   .empty { padding: 22px 16px; text-align: center; color: var(--dim); }
@@ -156,6 +163,19 @@
   /* 窄屏没有悬停，地图别把首屏占满 */
   @media (max-width: 899px) {
     #mapBox svg { max-height: 46vh; width: auto; max-width: 100%; margin: 0 auto; }
+  }
+  /* 窄屏是手指在点：控件按 42px 起跳（Chrome/iOS 建议的最小触摸目标），
+     房产操作区按使用频率分行——常用的「已进屋」独占一行，补签次之，危险操作垫底 */
+  @media (max-width: 899px) {
+    :root { --ctl-h: 42px; }
+    button, select, input[type=text], input[type=date] { font-size: 14px; }
+    .home-actions { gap: 8px; justify-content: stretch; }
+    .home-actions > * { flex: 1 1 auto; }
+    .home-actions > .btn-enter { flex-basis: 100%; }
+    .home-actions input[type=date] { flex: 1 1 130px; width: auto; }
+    .home-actions > .btn-danger { flex-basis: 62%; }
+    .home-actions .lbl { display: inline; }   /* 手指没有悬停，标签必须写出来 */
+    .filters select { flex: 1 1 46%; }
   }
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -556,12 +576,12 @@ function renderHomes() {
       <div class="home-actions">
         ${h.demolishedAt > 0
           ? `<input type="date" id="dd-${key}" max="${todayStr()}" title="房子被拆的那天">
-        <button class="icon-btn" title="按所选日期更正炸房日" onclick="setDemolishDate('${key}')">${ico('calendar')}改炸房日</button>
-        <button class="icon-btn" title="房子还在？取消炸房标记" onclick="demolishHome('${key}')">${ico('undo')}取消炸房</button>`
-          : `<button class="icon-btn" title="刚进过屋，打卡重置倒计时" onclick="enteredHome('${key}')">${ico('home')}已进屋</button>
+        <button class="icon-btn" title="按所选日期更正炸房日" aria-label="改炸房日" onclick="setDemolishDate('${key}')">${ico('calendar')}<span class="lbl">改炸房日</span></button>
+        <button class="icon-btn" title="房子还在？取消炸房标记" aria-label="取消炸房" onclick="demolishHome('${key}')">${ico('undo')}<span class="lbl">取消炸房</span></button>`
+          : `<button class="icon-btn btn-enter" title="刚进过屋，打卡重置倒计时" onclick="enteredHome('${key}')">${ico('home')}已进屋</button>
         <input type="date" id="bd-${key}" max="${todayStr()}" title="日期：补签进屋日 / 标记炸房日都用它，留空按今天算">
-        <button class="icon-btn" title="按所选日期补签进屋" onclick="backfillHome('${key}')">${ico('calendar')}补签</button>
-        <button class="icon-btn" title="房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算" onclick="demolishHome('${key}')">${ico('zap')}我房炸了</button>`}
+        <button class="icon-btn" title="按所选日期补签进屋" aria-label="补签" onclick="backfillHome('${key}')">${ico('calendar')}<span class="lbl">补签</span></button>
+        <button class="icon-btn btn-danger" title="房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算" aria-label="我房炸了" onclick="demolishHome('${key}')">${ico('zap')}<span class="lbl">我房炸了</span></button>`}
         <button class="icon-btn" title="移除这套房产" aria-label="移除这套房产" onclick="removeHome('${key}')">${ico('trash')}</button>
       </div>
     </div>`;
