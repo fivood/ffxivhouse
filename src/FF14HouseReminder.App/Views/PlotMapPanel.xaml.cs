@@ -27,6 +27,8 @@ public partial class PlotMapPanel : UserControl
 
     private readonly Rectangle[] _cells = new Rectangle[30];
     private int _drawnArea = -1, _drawnHalf = -1, _drawnSlot = -1, _hit;
+    // 高亮属于哪个小区：只记房号的话，翻到别的小区时那边的同号地也会被点亮
+    private int _hitArea = -1, _hitSlot = -1;
 
     public event Action? RequestClose;
 
@@ -55,6 +57,8 @@ public partial class PlotMapPanel : UserControl
     {
         if (area < 0 || area >= GameData.AreaNames.Length || plotId < 1 || plotId > 60) return;
         _hit = plotId;
+        _hitArea = area;
+        _hitSlot = slot;
         AreaBox.SelectedIndex = area;
         if (slot >= 0 && slot < 30) SlotBox.SelectedIndex = slot;
         HalfBox.SelectedIndex = plotId > 30 ? 1 : 0;
@@ -69,6 +73,15 @@ public partial class PlotMapPanel : UserControl
     }
 
     private void Selection_Changed(object sender, SelectionChangedEventArgs e) => Draw();
+
+    /// <summary>手动切到某个小区（等同于用户操作那三个下拉）</summary>
+    public void SetWard(int area, int slot, int half)
+    {
+        AreaBox.SelectedIndex = area;
+        SlotBox.SelectedIndex = slot;
+        HalfBox.SelectedIndex = half;
+        Draw();
+    }
 
     private void Close_Click(object sender, RoutedEventArgs e) => RequestClose?.Invoke();
 
@@ -85,9 +98,10 @@ public partial class PlotMapPanel : UserControl
             Build(area, half, Math.Max(slot, 0));
         }
 
+        var sameWard = area == _hitArea && slot == _hitSlot;
         for (var i = 0; i < 30; i++)
         {
-            var isHit = half * 30 + i + 1 == _hit;
+            var isHit = sameWard && half * 30 + i + 1 == _hit;
             if (isHit)
             {
                 _cells[i].Fill = HitFill;

@@ -958,6 +958,8 @@ const PLOT_XZW = [
 const SIZE_OF = w => w < 14 ? 'S' : w < 18 ? 'M' : 'L';
 const MAP_SPAN = 430;   // 取景框边长（世界单位）：跨度最大的一张是 367，留点边
 let mapKey = '', mapHit = 0;
+// 高亮属于哪个小区。只记房号的话，手动翻到别的小区时那边的同号地也会被点亮
+let mapHitWard = '';
 
 function drawMap(hitId) {
   const area = +$('mapArea').value, half = +$('mapHalf').value, slot = +$('mapSlot').value || 0;
@@ -1001,8 +1003,9 @@ function drawMap(hitId) {
       `${half ? ' transform="translate(-704,-704) rotate(90)"' : ''}/>${cells}</svg>`;
   }
   if (hitId) mapHit = hitId;
+  const sameWard = mapHitWard === `${area}:${slot}`;
   $('mapBox').querySelectorAll('.plot').forEach(el =>
-    el.classList.toggle('on', +el.dataset.no === mapHit));
+    el.classList.toggle('on', sameWard && +el.dataset.no === mapHit));
 }
 
 // 折叠：点整条标题条（手机上那个小箭头点不中），状态记在 localStorage
@@ -1028,6 +1031,7 @@ function defaultPlot() {
 // 滑过房屋卡片：把地图切到那套房所在的图并高亮它
 function hoverPlot(key) {
   const { area, slot, id } = parseKey(key);
+  mapHitWard = `${area}:${slot}`;
   $('mapArea').value = area;
   $('mapSlot').value = slot;
   $('mapHalf').value = id > 30 ? 1 : 0;
