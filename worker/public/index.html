@@ -165,9 +165,12 @@
   #mapBox .plot-no { font-size: 13px; text-anchor: middle; font-weight: bold; pointer-events: none;
                      fill: #3F3F38; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
   #mapHint { padding: 6px 10px; font-size: 12px; color: var(--dim); line-height: 1.5; }
+  .strip.foldable { cursor: pointer; user-select: none; }
   .fold { background: transparent; border: none; padding: 0 4px; font-size: 12px;
-          color: var(--dim); cursor: pointer; }
-  .fold:hover:not(:disabled) { background: transparent; color: var(--link); }
+          color: var(--dim); cursor: pointer; pointer-events: none; }
+  /* 纯图标、无边框（顶部刷新用） */
+  .icon-btn.plain { background: transparent; border: none; color: var(--dim); padding: 4px 6px; }
+  .icon-btn.plain:hover:not(:disabled) { background: transparent; color: var(--link); }
   /* 窄屏没有悬停，地图别把首屏占满 */
   @media (max-width: 899px) {
     #mapBox svg { max-height: 46vh; width: auto; max-width: 100%; margin: 0 auto; }
@@ -179,7 +182,6 @@
     button, select, input[type=text], input[type=date] { font-size: 14px; }
     .home-actions { gap: 8px; justify-content: stretch; }
     .home-actions > * { flex: 1 1 auto; }
-    .home-actions > .btn-enter { flex-basis: 100%; }
     .home-actions input[type=date] { flex: 1 1 130px; width: auto; }
     .home-actions > .btn-danger { flex-basis: 62%; }
     .home-actions .lbl { display: inline; }   /* 手指没有悬停，标签必须写出来 */
@@ -196,10 +198,9 @@
 
 <div class="row">
   <h1><img src="/icon-64.png" width="24" height="24" style="vertical-align:-4px;margin-right:4px">抽房了吗<span id="nickBadge" class="meta" style="margin-left:8px"></span></h1>
-  <button class="icon-btn" onclick="refreshAll()" title="重新拉取数据">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+  <button class="icon-btn plain" onclick="refreshAll()" title="重新拉取数据" aria-label="刷新">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><polyline points="21 3 21 9 15 9"/></svg>
-    刷新
   </button>
 </div>
 <div class="meta" style="margin:2px 0 4px">
@@ -214,9 +215,9 @@
 
 <!-- 房区图（常显） -->
 <div id="mapSection">
-  <div class="strip"><span>⊙ 房区图 <button class="fold" id="mapArrow" onclick="toggleMapFold()"
-      title="收起 / 展开">▾</button></span>
-    <span id="mapCtl">
+  <div class="strip foldable" onclick="toggleFold('map')" title="点标题条收起 / 展开">
+    <span>⊙ 房区图 <button class="fold" id="mapArrow">▾</button></span>
+    <span id="mapCtl" data-fold="map" onclick="event.stopPropagation()">
       <select id="mapArea" onchange="drawMap()">
         <option value="0">海雾村</option><option value="1">薰衣草苗圃</option>
         <option value="2">高脚孤丘</option><option value="3">白银乡</option>
@@ -227,7 +228,7 @@
       </select>
     </span>
   </div>
-  <div class="panel" id="mapPanel">
+  <div class="panel" id="mapPanel" data-fold="map">
     <div id="mapBox"></div>
     <div id="mapHint">滑过（手机上点）房屋卡片或图上地块即高亮，也可直接用上面两个下拉翻。上方为北，同一房区各小区布局相同。</div>
   </div>
@@ -249,14 +250,17 @@
 
 <!-- 我的关注（吸顶，需直接挂在 body 下才能整页吸附） -->
 <div id="watchSticky" class="sticky-top" style="display:none">
-  <div class="strip"><span>⊙ 我的关注</span></div>
-  <div class="panel" id="watchList"><div class="empty">加载中…</div></div>
+  <div class="strip foldable" onclick="toggleFold('watch')" title="点标题条收起 / 展开">
+    <span>⊙ 我的关注 <button class="fold" id="watchArrow">▾</button></span></div>
+  <div class="panel" id="watchList" data-fold="watch"><div class="empty">加载中…</div></div>
 </div>
 
 <!-- 我的房产（炸房提醒） -->
 <div id="homeSection" style="display:none">
-  <div class="strip"><span>⊙ 我的房产 <span class="meta" style="font-weight:normal">45 天未进屋会拆除</span></span></div>
-  <div class="panel">
+  <div class="strip foldable" onclick="toggleFold('home')" title="点标题条收起 / 展开">
+    <span>⊙ 我的房产 <button class="fold" id="homeArrow">▾</button>
+      <span class="meta" style="font-weight:normal">45 天未进屋会拆除</span></span></div>
+  <div class="panel" data-fold="home">
     <div id="homeList"><div class="empty">暂无登记</div></div>
     <div class="bind-box" style="border-top:1px solid #E3E3DA">
       <span class="meta">登记我的房（多账号可登记多套，角色名做备注）：</span>
@@ -449,6 +453,7 @@ async function loadWatch() {
     $('watchSection').style.display = 'block';
     $('watchSticky').style.display = 'block';
     renderWatch();
+    defaultPlot();
     renderSales(); // 刷新关注按钮状态
   } catch { /* 网络错误静默 */ }
 }
@@ -582,16 +587,17 @@ function renderHomes() {
         status = `<span style="color:${color};font-weight:bold">● 剩余 ${d} 天</span>` +
           ` <span class="meta">最后进屋 ${fmtDate(h.lastEnteredAt)}</span>`;
       }
+    const enterBtn = h.demolishedAt > 0 ? '' :
+      `<button class="icon-btn btn-enter ${h.lastEnteredAt > 0 ? 'lit d' + enterStage(h.remainDays) : ''}" title="刚进过屋，打卡重置倒计时" onclick="enteredHome('${key}')">${ico('check')}已进屋</button>`;
     return `<div class="item" onmouseenter="hoverPlot('${key}')">
-      <div class="row"><span class="title">${h.serverName} ${h.areaName} ${h.slotNo}区 ${h.id}号 <span class="meta">${h.label}</span></span></div>
+      <div class="row"><span class="title">${h.serverName} ${h.areaName} ${h.slotNo}区 ${h.id}号 <span class="meta">${h.label}</span></span>${enterBtn}</div>
       <div>${status}</div>
       <div class="home-actions">
         ${h.demolishedAt > 0
           ? `<input type="date" id="dd-${key}" max="${todayStr()}" title="房子被拆的那天">
         <button class="icon-btn" title="按所选日期更正炸房日" aria-label="改炸房日" onclick="setDemolishDate('${key}')">${ico('calendar')}<span class="lbl">改炸房日</span></button>
         <button class="icon-btn" title="房子还在？取消炸房标记" aria-label="取消炸房" onclick="demolishHome('${key}')">${ico('undo')}<span class="lbl">取消炸房</span></button>`
-          : `<button class="icon-btn btn-enter ${h.lastEnteredAt > 0 ? 'lit d' + enterStage(h.remainDays) : ''}" title="刚进过屋，打卡重置倒计时" onclick="enteredHome('${key}')">${ico('check')}已进屋</button>
-        <input type="date" id="bd-${key}" max="${todayStr()}" title="日期：补签进屋日 / 标记炸房日都用它，留空按今天算">
+          : `<input type="date" id="bd-${key}" max="${todayStr()}" title="日期：补签进屋日 / 标记炸房日都用它，留空按今天算">
         <button class="icon-btn" title="按所选日期补签进屋" aria-label="补签" onclick="backfillHome('${key}')">${ico('calendar')}<span class="lbl">补签</span></button>
         <button class="icon-btn btn-danger" title="房子被拆了？开始旧家具 35 天保管倒计时；选了日期就按那天起算" aria-label="我房炸了" onclick="demolishHome('${key}')">${ico('zap')}<span class="lbl">我房炸了</span></button>`}
         <button class="icon-btn" title="移除这套房产" aria-label="移除这套房产" onclick="removeHome('${key}')">${ico('trash')}</button>
@@ -778,19 +784,24 @@ function drawMap(hitId) {
     el.classList.toggle('on', +el.dataset.no === mapHit));
 }
 
-const MAP_FOLD_KEY = 'mapFolded';
-function setMapFold(folded) {
-  $('mapPanel').style.display = folded ? 'none' : '';
-  $('mapCtl').style.display = folded ? 'none' : '';
-  $('mapArrow').textContent = folded ? '▸' : '▾';
-  try { localStorage.setItem(MAP_FOLD_KEY, folded ? '1' : '0'); } catch {}
+// 折叠：点整条标题条（手机上那个小箭头点不中），状态记在 localStorage
+function setFold(name, folded) {
+  document.querySelectorAll(`[data-fold="${name}"]`).forEach(el => el.style.display = folded ? 'none' : '');
+  $(name + 'Arrow').textContent = folded ? '▸' : '▾';
+  try { localStorage.setItem('fold:' + name, folded ? '1' : '0'); } catch {}
 }
-function toggleMapFold() { setMapFold($('mapPanel').style.display !== 'none'); }
-function initMapFold() {
+function toggleFold(name) { setFold(name, $(name + 'Arrow').textContent === '▾'); }
+function initFold(name, foldedByDefault) {
   let saved = null;
-  try { saved = localStorage.getItem(MAP_FOLD_KEY); } catch {}
-  // 没存过就看屏幕：窄屏没有悬停，地图摊在首屏只是占地方，默认收起
-  setMapFold(saved != null ? saved === '1' : !window.matchMedia('(min-width: 900px)').matches);
+  try { saved = localStorage.getItem('fold:' + name); } catch {}
+  setFold(name, saved != null ? saved === '1' : foldedByDefault);
+}
+
+// 还没指过任何一套房时，默认落在第一套关注/房产上（手机上没有悬停，不给默认就一直空着）
+function defaultPlot() {
+  if (mapHit) return;
+  const first = myWatches[0] || myHomes[0];
+  if (first) hoverPlot(`${first.server}:${first.area}:${first.slot}:${first.id}`);
 }
 
 // 滑过房屋卡片：把地图切到那套房所在的图并高亮它
@@ -803,7 +814,10 @@ function hoverPlot(key) {
 
 // ── 启动 ──
 drawMap();
-initMapFold();
+// 窄屏没有悬停，地图摊在首屏只是占地方，默认收起；关注和房产默认展开
+initFold('map', !window.matchMedia('(min-width: 900px)').matches);
+initFold('watch', false);
+initFold('home', false);
 loadCred();
 loadServers().then(() => { restoreUi(); loadSales(); });
 loadWatch();
