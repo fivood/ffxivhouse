@@ -103,7 +103,9 @@ public class GeneralSettings
     // 界面记忆：下次打开还是上次看的服务器/筛选/排序
     public int LastServer { get; set; }
     public int AreaFilterIndex { get; set; }
-    public int SizeFilterIndex { get; set; }
+    public bool SizeS { get; set; }
+    public bool SizeM { get; set; }
+    public bool SizeL { get; set; }
     public int RegionFilterIndex { get; set; }
     public int SortIndex { get; set; }
 }

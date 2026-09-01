@@ -56,12 +56,14 @@ public partial class MainViewModel : ObservableObject
 
     // 筛选（索引绑定，0 表示全部）
     [ObservableProperty] private int _areaFilterIndex;
-    [ObservableProperty] private int _sizeFilterIndex;
+    [ObservableProperty] private bool _sizeS;
+    [ObservableProperty] private bool _sizeM;
+    [ObservableProperty] private bool _sizeL;
     [ObservableProperty] private int _regionFilterIndex;
     [ObservableProperty] private int _sortIndex;
 
     private int AreaFilter => AreaFilterIndex - 1;                       // -1 全部
-    private int SizeFilter => SizeFilterIndex - 1;                       // -1 全部
+    // 尺寸筛选改成可多选：三个都不选＝不限
     private int RegionFilter => RegionFilterIndex switch { 1 => 1, 2 => 2, _ => -1 };
 
     [ObservableProperty] private DateTimeOffset _now = DateTimeOffset.Now;
@@ -99,7 +101,9 @@ public partial class MainViewModel : ObservableObject
         // 恢复上次的筛选/排序（先于服务器赋值，避免用默认筛选刷一遍列表）
         var g = _config.Config.General;
         _areaFilterIndex = g.AreaFilterIndex;
-        _sizeFilterIndex = g.SizeFilterIndex;
+        _sizeS = g.SizeS;
+        _sizeM = g.SizeM;
+        _sizeL = g.SizeL;
         _regionFilterIndex = g.RegionFilterIndex;
         _sortIndex = g.SortIndex;
 
@@ -129,7 +133,9 @@ public partial class MainViewModel : ObservableObject
     }
 
     partial void OnAreaFilterIndexChanged(int value) { RefreshSalesList(); SaveUi(); }
-    partial void OnSizeFilterIndexChanged(int value) { RefreshSalesList(); SaveUi(); }
+    partial void OnSizeSChanged(bool value) { RefreshSalesList(); SaveUi(); }
+    partial void OnSizeMChanged(bool value) { RefreshSalesList(); SaveUi(); }
+    partial void OnSizeLChanged(bool value) { RefreshSalesList(); SaveUi(); }
     partial void OnRegionFilterIndexChanged(int value) { RefreshSalesList(); SaveUi(); }
     partial void OnSortIndexChanged(int value) { RefreshSalesList(); SaveUi(); }
 
@@ -139,7 +145,9 @@ public partial class MainViewModel : ObservableObject
         var g = _config.Config.General;
         g.LastServer = SelectedServer?.Id ?? g.LastServer;
         g.AreaFilterIndex = AreaFilterIndex;
-        g.SizeFilterIndex = SizeFilterIndex;
+        g.SizeS = SizeS;
+        g.SizeM = SizeM;
+        g.SizeL = SizeL;
         g.RegionFilterIndex = RegionFilterIndex;
         g.SortIndex = SortIndex;
         _config.Save();
@@ -341,7 +349,10 @@ public partial class MainViewModel : ObservableObject
         var sales = all
             .Where(s => s.Data.PurchaseType == (int)PurchaseType.Lottery || s.Data.PurchaseType == (int)PurchaseType.FCFS)
             .Where(s => AreaFilter < 0 || s.Data.Area == AreaFilter)
-            .Where(s => SizeFilter < 0 || s.Data.EffectiveSize == SizeFilter)
+            .Where(s => (!SizeS && !SizeM && !SizeL)
+                        || (SizeS && s.Data.EffectiveSize == 0)
+                        || (SizeM && s.Data.EffectiveSize == 1)
+                        || (SizeL && s.Data.EffectiveSize == 2))
             .Where(s => RegionFilter < 0 || s.Data.RegionType == RegionFilter);
 
         IOrderedEnumerable<HouseSnapshot> ordered = SortIndex switch

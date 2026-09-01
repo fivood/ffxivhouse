@@ -69,6 +69,35 @@
             </Style.Triggers>
         </Style>
 
+        <!-- 尺寸多选的小方钮 -->
+        <Style TargetType="ToggleButton" x:Key="SizeToggle">
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,1,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="#F2F2EB" BorderBrush="#ABABA0" BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2d8c9d"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#14545e"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#2d8c9d"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- 一行里混着按钮、下拉、日期框、输入框，高度统一才不会高低不齐
              （默认分别是 26 / 21.2 / 24 / 17.2） -->
         <Style TargetType="ComboBox"><Setter Property="Height" Value="26"/></Style>
@@ -428,12 +457,12 @@
                         <ComboBoxItem Content="白银乡"/>
                         <ComboBoxItem Content="穹顶皓天"/>
                     </ComboBox>
-                    <ComboBox Width="62" Margin="1" SelectedIndex="{Binding SizeFilterIndex}">
-                        <ComboBoxItem Content="全尺寸"/>
-                        <ComboBoxItem Content="S"/>
-                        <ComboBoxItem Content="M"/>
-                        <ComboBoxItem Content="L"/>
-                    </ComboBox>
+                    <!-- 尺寸可多选：三个都不选＝不限 -->
+                    <StackPanel Orientation="Horizontal" Margin="1">
+                        <ToggleButton Content="S" IsChecked="{Binding SizeS}" Style="{StaticResource SizeToggle}"/>
+                        <ToggleButton Content="M" IsChecked="{Binding SizeM}" Style="{StaticResource SizeToggle}"/>
+                        <ToggleButton Content="L" IsChecked="{Binding SizeL}" Style="{StaticResource SizeToggle}"/>
+                    </StackPanel>
                     <ComboBox Width="62" Margin="1" SelectedIndex="{Binding RegionFilterIndex}">
                         <ComboBoxItem Content="全部"/>
                         <ComboBoxItem Content="部队"/>

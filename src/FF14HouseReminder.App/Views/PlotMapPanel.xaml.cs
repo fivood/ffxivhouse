@@ -29,7 +29,7 @@ public partial class PlotMapPanel : UserControl
     {
         InitializeComponent();
         AreaBox.ItemsSource = GameData.AreaNames;
-        HalfBox.ItemsSource = new[] { "主城区 1-30 号", "扩展区 31-60 号" };
+        HalfBox.ItemsSource = new[] { "主城区 1-30 号", "扩建区 31-60 号" };
         AreaBox.SelectedIndex = 0;
         HalfBox.SelectedIndex = 0;
     }
@@ -83,7 +83,7 @@ public partial class PlotMapPanel : UserControl
         MapCanvas.Width = HousingMap.ViewSpan;
         MapCanvas.Height = HousingMap.ViewSpan;
 
-        // 底图：主城区直接平移；扩展区顺时针转 90° 再平移（见 HousingMap 注释）
+        // 底图：主城区直接平移；扩建区顺时针转 90° 再平移（见 HousingMap 注释）
         const double halfSpan = HousingMap.MapSpan / 2, shift = HousingMap.SubdivisionShift;
         MapCanvas.Children.Add(new Image
         {

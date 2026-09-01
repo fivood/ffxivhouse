@@ -4,15 +4,15 @@ namespace FF14HouseReminder.Models;
 /// 房区地块位置。数据来源：艾欧泽亚售楼中心前端。
 ///
 /// 每块地三个数：游戏世界坐标 x、z 与半边长 w（取整）。同一房区各小区布局相同，
-/// 所以只按房区存一份，1-30 号是主城区、31-60 号是扩展区。
+/// 所以只按房区存一份，1-30 号是主城区、31-60 号是扩建区。
 ///
 /// 底图 Resources/maps/{房区}-0.jpg 是 2048px 整图，换算关系 像素 = 世界坐标 × 2 + 1024，
-/// 也就是整张图在世界坐标系里正好落在 (-512,-512)~(512,512)。扩展区不需要单独出图：
+/// 也就是整张图在世界坐标系里正好落在 (-512,-512)~(512,512)。扩建区不需要单独出图：
 /// 实测它就是主城区顺时针转 90° 再平移 (-704,-704)，五个房区都一样，残差 &lt; 1 格。
 /// </summary>
 public static class HousingMap
 {
-    /// <summary>扩展区相对主城区的平移量（先转 90° 再平移）</summary>
+    /// <summary>扩建区相对主城区的平移量（先转 90° 再平移）</summary>
     public const double SubdivisionShift = -704;
 
     /// <summary>底图边长（世界单位）：2048px ÷ 2</summary>
@@ -37,7 +37,7 @@ public static class HousingMap
             .ToArray())
         .ToArray();
 
-    /// <summary>某房区某半区的 30 块地。half：0 = 主城区 1-30 号，1 = 扩展区 31-60 号</summary>
+    /// <summary>某房区某半区的 30 块地。half：0 = 主城区 1-30 号，1 = 扩建区 31-60 号</summary>
     public static (int X, int Z, int W)[] Ward(int area, int half) =>
         Plots[area][(half * 30)..(half * 30 + 30)];
 

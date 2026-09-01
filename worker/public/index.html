@@ -84,8 +84,8 @@
   .filters { background: var(--strip); border-top: 1px solid var(--bg);
              display: flex; flex-wrap: wrap; gap: 2px; padding: 4px; }
   .empty { padding: 22px 16px; text-align: center; color: var(--dim); }
-  .sticky-top { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 6px rgba(0,0,0,.15); }
-  #watchList { max-height: 42vh; overflow-y: auto; }
+  /* 曾经这里有一堆吸顶和内部滚动条（侧栏、关注列表各滚各的），叠在一起很难用。
+     现在整页只留一个滚动条，需要收起哪块点标题条就行 */
   /* 悬停反馈只给在售房屋卡片（关注/房产/推送是操作区，不做整块高亮） */
   .sales-item { transition: background .12s; }
   @media (hover: hover) and (pointer: fine) {
@@ -107,6 +107,10 @@
   .icon-btn.on { background: var(--link); color: #fff; }
   /* 提醒时间多选片 */
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+  /* 尺寸多选：三个小方片，全不选＝全尺寸 */
+  .size-pick { display: inline-flex; gap: 2px; margin: 2px; }
+  .size-pick button { min-width: 30px; padding: 0 8px; font-weight: bold; }
+  .size-pick button.on { background: var(--link); color: #fff; }
   .chip {
     padding: 5px 12px; border: none; background: #E7E7DE;
     font-size: 12px; cursor: pointer; user-select: none; transition: background .12s;
@@ -146,9 +150,7 @@
     .col-side {
       display: flex; flex-direction: column; gap: 14px;
       grid-column: 2; grid-row: 1;
-      position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow-y: auto;
     }
-    .col-side .sticky-top { position: static; box-shadow: none; }
     /* 两栏顶端对齐：块间距交给 gap，标题条不再自带上边距 */
     .col-main .strip, .col-side .strip { margin-top: 0; }
     /* 标题条 + 筛选栏吸顶，滚动时下拉框始终可用；顶部留白与侧栏一致 */
@@ -156,7 +158,6 @@
     .sales-head::before {   /* 盖住吸顶留白，避免卡片从缝里露出来 */
       content: ''; position: absolute; left: 0; right: 0; top: -10px; height: 10px; background: var(--bg);
     }
-    #watchList { max-height: none; }   /* 侧栏整体滚动，不再单独限高 */
   }
   /* 更宽时在售列表两列卡片 */
   @media (min-width: 1100px) {
@@ -171,6 +172,9 @@
   #mapBox { line-height: 0; }
   #mapBox svg { display: block; width: 100%; height: auto; background: #F7F7F0; }
   #mapBox .plot { fill: rgba(0,0,0,0); stroke: #7A7A6C; stroke-width: 1; stroke-dasharray: 4 4; }
+  /* 在售＝空地（橙），其余＝已住人（灰）；没有在售数据时两个都不加 */
+  #mapBox .plot.free { fill: rgba(166,106,0,.34); stroke: #A66A00; stroke-dasharray: none; }
+  #mapBox .plot.taken { fill: rgba(55,55,48,.38); }
   #mapBox .plot:hover { fill: rgba(45,140,157,.22); }
   #mapBox .plot.on { fill: rgba(45,140,157,.42); stroke: #14545e; stroke-width: 4; stroke-dasharray: none; }
   #mapBox .plot-no { font-size: 13px; text-anchor: middle; font-weight: bold; pointer-events: none;
@@ -250,14 +254,17 @@
         <option value="2">高脚孤丘</option><option value="3">白银乡</option>
         <option value="4">穹顶皓天</option>
       </select>
+      <select id="mapSlot" onchange="drawMap()"></select>
       <select id="mapHalf" onchange="drawMap()">
-        <option value="0">主城区 1-30</option><option value="1">扩展区 31-60</option>
+        <option value="0">主城区 1-30</option><option value="1">扩建区 31-60</option>
       </select>
     </span>
   </div>
   <div class="panel" id="mapPanel" data-fold="map">
     <div id="mapBox"></div>
-    <div id="mapHint">滑过（手机上点）房屋卡片即高亮对应地块。上方为北，各小区布局相同。</div>
+    <div id="mapHint"><span id="mapCount"></span><br>
+      <span style="color:#A66A00">■</span> 在售（空地）　<span style="color:#6b6b60">■</span> 已住人　
+      滑过房屋卡片即高亮。上方为北，各小区布局相同。</div>
   </div>
 </div>
 
@@ -274,7 +281,7 @@
 </div>
 
 <!-- 我的关注（吸顶，需直接挂在 body 下才能整页吸附） -->
-<div id="watchSticky" class="sticky-top" style="display:none">
+<div id="watchSticky" style="display:none">
   <div class="strip foldable" onclick="toggleFold('watch')" title="收起 / 展开">
     <span>⊙ 我的关注 <button class="fold" id="watchArrow">▾</button></span></div>
   <div class="panel" id="watchList" data-fold="watch"><div class="empty">加载中…</div></div>
@@ -373,9 +380,7 @@
     <option value="1">薰衣草苗圃</option><option value="2">高脚孤丘</option>
     <option value="3">白银乡</option><option value="4">穹顶皓天</option>
   </select>
-  <select id="selSize">
-    <option value="-1">全尺寸</option><option>S</option><option>M</option><option>L</option>
-  </select>
+  <span class="size-pick" id="sizePick"></span><input type="hidden" id="selSize" value="">
   <select id="selRegion">
     <option value="-1">全部</option><option value="1">部队</option><option value="2">个人</option>
   </select>
@@ -498,6 +503,7 @@ async function loadSales(manual) {
     sales = await (await fetch(`/api/sales?server=${server}`)).json();
     if (!Array.isArray(sales)) throw new Error();
     renderSales();
+    drawMap();   // 空地/已住人是按在售列表算的，数据一到就重画
   } catch {
     $('salesList').innerHTML = '<div class="empty">数据获取失败，稍后再试</div>';
   }
@@ -597,19 +603,47 @@ function renderWatch() {
   }).join('');
 }
 
+// 尺寸多选：值存成 "S,M" 这样一串，兼容旧的 -1 / 单个字母
+function pickedSizes() {
+  const raw = $('selSize').value;
+  if (!raw || raw === '-1') return [];
+  return raw.split(',').filter(x => 'SML'.includes(x));
+}
+
+function renderMapSlots() {
+  $('mapSlot').innerHTML = Array.from({ length: 30 }, (_, i) =>
+    `<option value="${i}">${i + 1}区</option>`).join('');
+}
+
+function renderSizePick() {
+  const on = pickedSizes();
+  $('sizePick').innerHTML = ['S', 'M', 'L'].map(x =>
+    `<button class="${on.includes(x) ? 'on' : ''}" onclick="toggleSize('${x}')"` +
+    ` title="${on.includes(x) ? '取消' : '只看'} ${x}">${x}</button>`).join('');
+}
+
+function toggleSize(x) {
+  const on = pickedSizes();
+  const next = on.includes(x) ? on.filter(v => v !== x) : [...on, x];
+  $('selSize').value = ['S', 'M', 'L'].filter(v => next.includes(v)).join(',');
+  renderSizePick();
+  saveUi();
+  renderSales();
+}
+
 function renderSales() {
   if (!sales.length) {
     $('salesList').innerHTML = '<div class="empty">该服务器暂无在售房屋</div>';
     $('salesCount').textContent = '';
     return;
   }
-  const area = parseInt($('selArea').value), size = $('selSize').value,
+  const area = parseInt($('selArea').value), sizes = pickedSizes(),
         region = parseInt($('selRegion').value), sort = parseInt($('selSort').value);
   const watched = new Set(myWatches.map(watchKey));
 
   let list = sales.filter(h => h.purchaseType === 2 || h.purchaseType === 1)
     .filter(h => area < 0 || h.area === area)
-    .filter(h => size === '-1' || h.size === size)
+    .filter(h => !sizes.length || sizes.includes(h.size))
     .filter(h => region < 0 || h.regionType === region);
 
   const by = {
@@ -869,9 +903,9 @@ async function saveWxUid() {
 
 // ── 房区图 ──
 // 地块位置：游戏世界坐标 x,z 与半边长 w（取整）。同一房区各小区布局相同；
-// 1-30 号在主城区、31-60 号在扩展区。数据来源：艾欧泽亚售楼中心前端。
+// 1-30 号在主城区、31-60 号在扩建区。数据来源：艾欧泽亚售楼中心前端。
 // 底图 /maps/{房区}-0.jpg 是 2048px 整图，像素 = 世界坐标 × 2 + 1024，
-// 所以在世界坐标系里它正好落在 (-512,-512)~(512,512)。扩展区不用单独出图：
+// 所以在世界坐标系里它正好落在 (-512,-512)~(512,512)。扩建区不用单独出图：
 // 实测它就是主城区顺时针转 90° 再平移 (-704,-704)，五个房区都一样，残差 < 1 格。
 const AREA_NAMES = ['海雾村', '薰衣草苗圃', '高脚孤丘', '白银乡', '穹顶皓天'];
 const PLOT_XZW = [
@@ -886,7 +920,10 @@ const MAP_SPAN = 430;   // 取景框边长（世界单位）：跨度最大的�
 let mapKey = '', mapHit = 0;
 
 function drawMap(hitId) {
-  const area = +$('mapArea').value, half = +$('mapHalf').value, key = area + ':' + half;
+  const area = +$('mapArea').value, half = +$('mapHalf').value, slot = +$('mapSlot').value || 0;
+  const srv = +($('selServer').value || 0);
+  // 在售列表变了也要重画（空地/已住人按它算）
+  const key = [area, half, slot, srv, sales.length].join(':');
   if (key !== mapKey) {
     mapKey = key;
     const list = PLOT_XZW[area].slice(half * 30, half * 30 + 30);
@@ -895,13 +932,29 @@ function drawMap(hitId) {
     // 按各自跨度裁的话，滑过不同房区时面板高度会跳，把下面的关注列表顶得乱动。
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cz = (Math.min(...zs) + Math.max(...zs)) / 2;
     const x0 = cx - MAP_SPAN / 2, z0 = cz - MAP_SPAN / 2, vw = MAP_SPAN, vh = MAP_SPAN;
+    // 售楼中心只给「在售」的房；同一小区里没出现的就是已经有人住了。
+    // 一条数据都没有时（还没加载 / 该服无上报）不判断，免得整区错标成住满
+    const onSale = new Set(sales
+      .filter(h => h.server === srv && h.area === area && h.slot === slot)
+      .map(h => h.id));
+    const known = sales.length > 0;
+    let freeCount = 0;
+
     const cells = list.map(([x, z, r], i) => {
       const no = half * 30 + i + 1;
-      return `<rect class="plot" data-no="${no}" x="${x - r}" y="${z - r}"` +
-        ` width="${2 * r}" height="${2 * r}"><title>${no}号 [${SIZE_OF(r)}]</title></rect>` +
+      const free = onSale.has(no);
+      if (free) freeCount++;
+      const cls = known ? (free ? ' free' : ' taken') : '';
+      return `<rect class="plot${cls}" data-no="${no}" x="${x - r}" y="${z - r}"` +
+        ` width="${2 * r}" height="${2 * r}"><title>${no}号 [${SIZE_OF(r)}]` +
+        `${known ? (free ? ' · 在售' : ' · 已住人') : ''}</title></rect>` +
         `<text class="plot-no" x="${x}" y="${z + 5}">${no}</text>`;
     }).join('');
-    // 扩展区没有单独的图：主城区那张顺时针转 90° 再平移即可
+
+    $('mapCount').textContent = known
+      ? `这半个小区 30 块地，在售 ${freeCount} 块`
+      : '在售数据加载中…';
+    // 扩建区没有单独的图：主城区那张顺时针转 90° 再平移即可
     $('mapBox').innerHTML = `<svg viewBox="${x0} ${z0} ${vw} ${vh}">` +
       `<image x="-512" y="-512" width="1024" height="1024" href="/maps/${area}-0.jpg"` +
       `${half ? ' transform="translate(-704,-704) rotate(90)"' : ''}/>${cells}</svg>`;
@@ -935,6 +988,7 @@ function defaultPlot() {
 function hoverPlot(key) {
   const { area, id } = parseKey(key);
   $('mapArea').value = area;
+  $('mapSlot').value = slot;
   $('mapHalf').value = id > 30 ? 1 : 0;
   drawMap(id);
 }
@@ -945,6 +999,7 @@ if (tgApp) {
   document.title = '抽房了吗';
 }
 renderNotifyChips();
+renderMapSlots();
 drawMap();
 // 窄屏没有悬停，地图摊在首屏只是占地方，默认收起；关注和房产默认展开
 initFold('map', !window.matchMedia('(min-width: 900px)').matches);
@@ -953,11 +1008,11 @@ initFold('home', false);
 loadCred();
 // Mini App 打开时先换令牌再拉数据；浏览器直接打开就走原来的路径
 (tgApp ? tgAutoLogin() : Promise.resolve(false)).then(() => {
-  loadServers().then(() => { restoreUi(); loadSales(); });
+  loadServers().then(() => { restoreUi(); renderSizePick(); loadSales(); });
   loadWatch();
 });
 $('selServer').addEventListener('change', () => { saveUi(); loadSales(); });
-['selArea', 'selSize', 'selRegion', 'selSort'].forEach(id =>
+['selArea', 'selRegion', 'selSort'].forEach(id =>
   $(id).addEventListener('change', () => { saveUi(); renderSales(); }));
 setInterval(() => { renderWatch(); renderSales(); }, 30000); // 倒计时刷新
 setInterval(() => { loadSales(); loadWatch(); }, 5 * 60 * 1000); // 数据刷新
