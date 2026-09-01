@@ -73,12 +73,15 @@ public partial class PlotMapPanel : UserControl
     private void Build(int area, int half)
     {
         var ward = HousingMap.Ward(area, half);
-        const int pad = 26;
-        double x0 = ward.Min(p => p.X) - pad, z0 = ward.Min(p => p.Z) - pad;
+        // 十张图共用同一个正方形取景框：各房区跨度 201~367、宽高比 0.58~1.73，
+        // 各裁各的会让切换房区时缩放忽大忽小（网页端还会顶得下面的列表乱跳）
+        var cx = (ward.Min(p => p.X) + ward.Max(p => p.X)) / 2.0;
+        var cz = (ward.Min(p => p.Z) + ward.Max(p => p.Z)) / 2.0;
+        double x0 = cx - HousingMap.ViewSpan / 2, z0 = cz - HousingMap.ViewSpan / 2;
 
         MapCanvas.Children.Clear();
-        MapCanvas.Width = ward.Max(p => p.X) + pad - x0;
-        MapCanvas.Height = ward.Max(p => p.Z) + pad - z0;
+        MapCanvas.Width = HousingMap.ViewSpan;
+        MapCanvas.Height = HousingMap.ViewSpan;
 
         // 底图：主城区直接平移；扩展区顺时针转 90° 再平移（见 HousingMap 注释）
         const double halfSpan = HousingMap.MapSpan / 2, shift = HousingMap.SubdivisionShift;
