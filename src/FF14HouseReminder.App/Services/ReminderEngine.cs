@@ -35,6 +35,22 @@ public class ReminderEngine
         }
     }
 
+    /// <summary>当前阶段 + 之后两个阶段（周期固定，可直接推）。current 标记哪一段是真实的当前阶段。</summary>
+    private static IEnumerable<(LotteryState State, DateTimeOffset End, bool Current)> NextPhases(LotteryCycle.PhaseInfo phase)
+    {
+        var state = phase.State;
+        var end = phase.PhaseEnd;
+        yield return (state, end, true);
+        for (var i = 0; i < 2; i++)
+        {
+            // 申请期 → 公示期（+4 天）；公示期和准备期 → 申请期（+5 天）
+            (state, end) = state == LotteryState.Available
+                ? (LotteryState.ResultsPeriod, end.AddDays(LotteryCycle.ResultsDays))
+                : (LotteryState.Available, end.AddDays(LotteryCycle.EntryDays));
+            yield return (state, end, false);
+        }
+    }
+
     public ReminderEngine(ConfigService config, DataStore store, PushService push, TaskSchedulerSync taskSync)
     {
         _config = config;
@@ -51,9 +67,12 @@ public class ReminderEngine
         var settings = _config.Config.Reminders;
         var list = new List<ScheduledReminder>();
         var watchDirty = false;
+        var watched = 0;
+        var missing = 0;
 
         foreach (var watch in _config.Config.WatchList.Where(w => w.Enabled))
         {
+            watched++;
             // 抽签金返还：死线在公示期结束后 90 天，那时房子已从在售列表消失、
             // 阶段也早过了，只能按关注项自己记下的死线排期，不能跟着当前阶段算
             if (watch.DepositDeadline is { } deposit)
@@ -77,7 +96,7 @@ public class ReminderEngine
             }
 
             var snapshot = _store.Get(watch.Key);
-            if (snapshot == null) continue;
+            if (snapshot == null) { missing++; continue; }
 
             var house = snapshot.Data;
             var phase = LotteryCycle.GetPhase(house, now);
@@ -106,67 +125,73 @@ public class ReminderEngine
                 });
             }
 
-            switch (phase.State)
+            // 只排当前阶段的话，程序关着时下一阶段的提醒根本进不了任务计划：
+            // 准备期里关掉，23:00 开抽那条就没人排；申请期里关掉，开奖那条同理。
+            // 周期是固定的 5 天申请 + 4 天公示，直接把后面两个阶段一并排上。
+            foreach (var (state, phaseEnd, current) in NextPhases(phase))
             {
-                case LotteryState.Available:
-                    if (settings.NotifyEntryDeadline && watch.Mode == WatchMode.Planned)
-                    {
-                        foreach (var h in settings.LeadHours)
+                switch (state)
+                {
+                    case LotteryState.Available:
+                        if (settings.NotifyEntryDeadline && watch.Mode == WatchMode.Planned)
                         {
-                            Add(ReminderType.EntryDeadline, h, phase.PhaseEnd.AddHours(-h),
-                                phase.PhaseEnd, watch.Key.ToString(),
-                                "抽房报名即将截止",
-                                $"{pos} 申请期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止，想去抽记得上线报名！");
+                            foreach (var h in settings.LeadHours)
+                            {
+                                Add(ReminderType.EntryDeadline, h, phaseEnd.AddHours(-h),
+                                    phaseEnd, watch.Key.ToString(),
+                                    "抽房报名即将截止",
+                                    $"{pos} 申请期将于 {phaseEnd.LocalDateTime:MM-dd HH:mm} 截止，想去抽记得上线报名！");
+                            }
                         }
-                    }
-                    // 新一轮开抽：挂在申请期开始那一刻。挂在上一阶段结束的话，
-                    // 到点时 GetPhase 已经翻页到申请期，原分支再也进不去，等于永远发不出
-                    if (settings.NotifyNextEntryStart && watch.Mode == WatchMode.Planned)
-                    {
-                        Add(ReminderType.NextEntryStart, null, phase.PhaseEnd.AddDays(-LotteryCycle.EntryDays),
-                            phase.PhaseEnd, watch.Key.ToString(),
-                            "新一轮抽签开始",
-                            $"{pos} 已开放抽签预约，申请期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止，想去抽记得上线报名！");
-                    }
-                    break;
+                        // 新一轮开抽：挂在申请期开始那一刻。挂在上一阶段结束的话，
+                        // 到点时 GetPhase 已经翻页到申请期，原分支再也进不去，等于永远发不出
+                        if (settings.NotifyNextEntryStart && watch.Mode == WatchMode.Planned)
+                        {
+                            Add(ReminderType.NextEntryStart, null, phaseEnd.AddDays(-LotteryCycle.EntryDays),
+                                phaseEnd, watch.Key.ToString(),
+                                "新一轮抽签开始",
+                                $"{pos} 已开放抽签预约，申请期将于 {phaseEnd.LocalDateTime:MM-dd HH:mm} 截止，想去抽记得上线报名！");
+                        }
+                        break;
 
-                case LotteryState.ResultsPeriod:
-                    // 开奖：申请期一结束就进公示期，挂在公示期开始那一刻发
-                    if (settings.NotifyResultsStart && watch.Mode == WatchMode.Participated)
-                    {
-                        Add(ReminderType.ResultsStart, null, phase.PhaseEnd.AddDays(-LotteryCycle.ResultsDays),
-                            phase.PhaseEnd, watch.Key.ToString(),
-                            "抽房结果已公布",
-                            $"{pos} 已进入公示期，你参与抽签的房子开奖了，快去查看结果！" +
-                            $"公示期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止。");
-                    }
-                    // 确认归属死线对两种关注模式都提醒：已报名要去看结果/购入，计划抽也该知道本轮结果
-                    if (settings.NotifyClaimDeadline)
-                    {
-                        foreach (var h in settings.LeadHours)
+                    case LotteryState.ResultsPeriod:
+                        // 开奖：申请期一结束就进公示期，挂在公示期开始那一刻发
+                        if (settings.NotifyResultsStart && watch.Mode == WatchMode.Participated)
                         {
-                            Add(ReminderType.ClaimDeadline, h, phase.PhaseEnd.AddHours(-h),
-                                phase.PhaseEnd, watch.Key.ToString(),
-                                "公示期即将截止（确认归属死线）",
-                                $"{pos} 公示期将于 {phase.PhaseEnd.LocalDateTime:MM-dd HH:mm} 截止。" +
-                                "中签请立即购入，逾期将失去资格并被扣除 50% 申请金！");
+                            Add(ReminderType.ResultsStart, null, phaseEnd.AddDays(-LotteryCycle.ResultsDays),
+                                phaseEnd, watch.Key.ToString(),
+                                "抽房结果已公布",
+                                $"{pos} 已进入公示期，你参与抽签的房子开奖了，快去查看结果！" +
+                                $"公示期将于 {phaseEnd.LocalDateTime:MM-dd HH:mm} 截止。");
                         }
-                    }
-                    // 已报名的，把抽签金返还死线记在关注项上，房子下架后还能按它提醒
-                    if (watch.Mode == WatchMode.Participated)
-                    {
-                        var depositDeadline = phase.PhaseEnd.AddDays(90);
-                        if (watch.DepositDeadline != depositDeadline)
+                        // 确认归属死线对两种关注模式都提醒：已报名要去看结果/购入，计划抽也该知道本轮结果
+                        if (settings.NotifyClaimDeadline)
                         {
-                            watch.DepositDeadline = depositDeadline;
-                            watchDirty = true;
+                            foreach (var h in settings.LeadHours)
+                            {
+                                Add(ReminderType.ClaimDeadline, h, phaseEnd.AddHours(-h),
+                                    phaseEnd, watch.Key.ToString(),
+                                    "公示期即将截止（确认归属死线）",
+                                    $"{pos} 公示期将于 {phaseEnd.LocalDateTime:MM-dd HH:mm} 截止。" +
+                                    "中签请立即购入，逾期将失去资格并被扣除 50% 申请金！");
+                            }
                         }
-                    }
-                    break;
+                        // 已报名的，把抽签金返还死线记在关注项上，房子下架后还能按它提醒
+                        if (current && watch.Mode == WatchMode.Participated)
+                        {
+                            var depositDeadline = phaseEnd.AddDays(90);
+                            if (watch.DepositDeadline != depositDeadline)
+                            {
+                                watch.DepositDeadline = depositDeadline;
+                                watchDirty = true;
+                            }
+                        }
+                        break;
 
-                case LotteryState.Preparing:
-                    // 「新一轮开抽」在申请期分支里发（见上），这里不排
-                    break;
+                    case LotteryState.Preparing:
+                        // 「新一轮开抽」在申请期分支里发（见上），这里不排
+                        break;
+                }
             }
         }
 
@@ -239,6 +264,15 @@ public class ReminderEngine
         }
 
         if (watchDirty) _config.Save();
+
+        // 关注的房子一条数据都没拿到（刚启动、断网）：这时算出来的「没有提醒」不是真的。
+        // 照着落盘会把已触发标记清空（下次数据到了会把同一条重弹一遍），
+        // 同步任务计划则会把程序关着时的兜底全删光。整轮跳过，等数据到了再算。
+        if (watched > 0 && missing == watched)
+        {
+            Logger.Warn("房屋数据尚未就绪，本轮不重排提醒");
+            return;
+        }
 
         lock (_lock)
         {

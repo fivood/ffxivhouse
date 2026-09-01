@@ -90,6 +90,7 @@ public partial class MainViewModel : ObservableObject
         _updates = updates;
 
         _store.DataUpdated += () => Application.Current.Dispatcher.Invoke(RefreshAll);
+        _store.DataUpdated += () => _ = PullCloudAsync();
         _polling.StatusChanged += () => Application.Current.Dispatcher.Invoke(() =>
             StatusText = _polling.StatusText);
         _updates.UpdateChecked += () => Application.Current.Dispatcher.Invoke(() =>
@@ -185,6 +186,45 @@ public partial class MainViewModel : ObservableObject
 
     public string HomesArrow => ShowHomes ? "▾" : "▸";
 
+    // ── 云端同步（填了账号才生效）──────────────────────────────
+    // 本地先改，UI 立刻响应、离线也照常用；同一个操作再推到云端。
+    // 下一次拉取以云端为准，所以推失败时本地改动会被覆盖回去——这是「云端为准」的代价。
+    private void SyncUp(Func<CloudSyncService, Task<bool>> op)
+    {
+        if (!App.Cloud.Linked) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await op(App.Cloud);
+                await PullCloudAsync();
+            }
+            catch (Exception ex) { Logger.Error("云端同步失败", ex); }
+        });
+    }
+
+    private DateTimeOffset _lastPull = DateTimeOffset.MinValue;
+
+    /// <summary>拉一次云端列表；有变化就重算提醒并刷新界面（任务计划也跟着更新）</summary>
+    public async Task PullCloudAsync(bool force = false)
+    {
+        if (!App.Cloud.Linked) return;
+        if (!force && DateTimeOffset.Now - _lastPull < TimeSpan.FromMinutes(2)) return;
+        _lastPull = DateTimeOffset.Now;
+        try
+        {
+            var changed = await App.Cloud.PullAsync();
+            if (!changed) return;
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                _reminders.Recompute();   // 顺带把 Windows 任务计划刷新成新列表
+                RefreshWatchList();
+                RefreshHomes();
+            });
+        }
+        catch (Exception ex) { Logger.Error("拉取云端列表失败", ex); }
+    }
+
     [RelayCommand]
     private void AddHome()
     {
@@ -218,6 +258,7 @@ public partial class MainViewModel : ObservableObject
             LastEnteredAt = DateTimeOffset.Now.ToUnixTimeSeconds() // 登记即起算
         });
         _config.Save();
+        SyncUp(c => c.AddHomeAsync(key, _config.Config.Homes.First(h => h.Key == key).Label));
         HomeSlotText = HomePlotText = HomeLabelText = "";
         _reminders.Recompute();
         RefreshHomes();
@@ -230,6 +271,7 @@ public partial class MainViewModel : ObservableObject
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         _config.Config.Homes.RemoveAll(h => h.Key == item.Item.Key);
         _config.Save();
+        SyncUp(c => c.RemoveHomeAsync(item.Item.Key));
         _reminders.Recompute();
         RefreshHomes();
     }
@@ -239,6 +281,7 @@ public partial class MainViewModel : ObservableObject
     {
         item.Item.LastEnteredAt = DateTimeOffset.Now.ToUnixTimeSeconds();
         _config.Save();
+        SyncUp(c => c.EnteredAsync(item.Item.Key, null));
         _reminders.Recompute();
         RefreshHomes();
     }
@@ -260,6 +303,7 @@ public partial class MainViewModel : ObservableObject
         HomeHint = "";
         item.Item.LastEnteredAt = new DateTimeOffset(date, TimeSpan.Zero).ToUnixTimeSeconds();
         _config.Save();
+        SyncUp(c => c.EnteredAsync(item.Item.Key, date.ToString("yyyy-MM-dd")));
         _reminders.Recompute();
         RefreshHomes();
     }
@@ -280,6 +324,9 @@ public partial class MainViewModel : ObservableObject
         }
         HomeHint = "";
         _config.Save();
+        SyncUp(c => c.DemolishedAsync(item.Item.Key,
+            item.Item.DemolishedAt > 0 && item.BackfillDate != null
+                ? item.BackfillDate.Value.Date.ToString("yyyy-MM-dd") : null));
         _reminders.Recompute();
         RefreshHomes();
     }
@@ -297,6 +344,7 @@ public partial class MainViewModel : ObservableObject
         item.Item.DemolishedAt = ts.Value;
         HomeHint = "";
         _config.Save();
+        SyncUp(c => c.DemolishedAsync(item.Item.Key, item.BackfillDate!.Value.Date.ToString("yyyy-MM-dd")));
         _reminders.Recompute();
         RefreshHomes();
     }
@@ -391,6 +439,7 @@ public partial class MainViewModel : ObservableObject
         if (_config.Config.WatchList.Any(w => w.Key == key)) return;
         _config.Config.WatchList.Add(WatchItem.From(item.Snapshot.Data));
         _config.Save();
+        SyncUp(c => c.AddWatchAsync(key));
         _reminders.Recompute();
         RefreshAll();
     }
@@ -400,16 +449,46 @@ public partial class MainViewModel : ObservableObject
     {
         _config.Config.WatchList.RemoveAll(w => w.Key == item.Item.Key);
         _config.Save();
+        SyncUp(c => c.RemoveWatchAsync(item.Item.Key));
         _reminders.Recompute();
         RefreshAll();
     }
 
+    /// <summary>点「抽了」先就地问申请号码（可不填，纯备忘）；已报名的直接改回计划抽</summary>
     [RelayCommand]
     private void ToggleWatchMode(WatchViewModel item)
     {
-        item.Item.Mode = item.Item.Mode == WatchMode.Planned ? WatchMode.Participated : WatchMode.Planned;
+        if (item.Item.Mode == WatchMode.Planned)
+        {
+            item.EntryNoInput = "";
+            item.Asking = true;
+            return;
+        }
+        SetWatchMode(item, WatchMode.Planned, "");
+    }
+
+    [RelayCommand]
+    private void ConfirmEntered(WatchViewModel item) =>
+        SetWatchMode(item, WatchMode.Participated, item.EntryNoInput.Trim());
+
+    [RelayCommand]
+    private void CancelEntered(WatchViewModel item) => item.Asking = false;
+
+    private void SetWatchMode(WatchViewModel item, WatchMode mode, string entryNo)
+    {
+        item.Asking = false;
+        item.Item.Mode = mode;
+        item.Item.EntryNo = entryNo.Length > 16 ? entryNo[..16] : entryNo;
         item.Item.FiredReminders.Clear();
         _config.Save();
+        // 报名了给自己发条回执（链接了云端的话渠道已关，这里只出 Windows 通知，不会重复）
+        if (mode == WatchMode.Participated)
+        {
+            var body = $"{item.DisplayName} [{item.SizeName}]"
+                + (item.Item.EntryNo.Length > 0 ? $"\n申请号码 #{item.Item.EntryNo}" : "");
+            _ = App.Push.SendAllAsync("已记下：你报名了", body, item.Item.Key.ToString());
+        }
+        SyncUp(c => c.SetModeAsync(item.Item.Key, mode, item.Item.EntryNo));
         _reminders.Recompute();
         RefreshWatchList();
     }

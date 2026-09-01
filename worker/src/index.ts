@@ -84,6 +84,8 @@ interface WatchItem {
    * 挂在阶段上算永远等不到，必须自己记住。
    */
   depositDeadline?: number;
+  /** 申请号码（游戏里报名后给的号），纯备忘，可不填 */
+  entryNo?: string;
 }
 
 /** 我的房产（炸房提醒）：手动登记 + 进房打卡 */
@@ -206,9 +208,22 @@ async function getSales(env: Env, serverId: number): Promise<HouseEntry[]> {
   return entries;
 }
 
+/**
+ * 玩家在游戏里看门牌报上来的「已抽选人数」：{ "区:小区:房号": [人数, 看到的时间] }。
+ * 售楼中心的 Participate 一直是 0，只有进游戏点门牌才看得到，所以这份数据只能靠人报。
+ * 一个服务器一个 KV key，读起来和房屋缓存一样便宜。
+ */
+type Reports = Record<string, [number, number]>;
+
+const repKey = (area: number, slot: number, id: number) => `${area}:${slot}:${id}`;
+
+async function getReports(env: Env, serverId: number): Promise<Reports> {
+  return (await env.KV.get<Reports>(`rep:${serverId}`, 'json')) ?? {};
+}
+
 // ═══════════════ Telegram ═══════════════
 
-async function tgSend(env: Env, chatId: number, text: string): Promise<void> {
+async function tgSend(env: Env, chatId: number, text: string, parseMode?: 'HTML'): Promise<void> {
   if (!env.TG_BOT_TOKEN) {
     console.log(`[no-token] -> ${chatId}: ${text}`);
     return;
@@ -216,7 +231,7 @@ async function tgSend(env: Env, chatId: number, text: string): Promise<void> {
   const resp = await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: parseMode }),
   });
   if (!resp.ok) console.error(`tgSend 失败 ${resp.status}: ${await resp.text()}`);
 }
@@ -307,6 +322,13 @@ async function wxSend(env: Env, spt: string, title: string, body: string): Promi
 }
 
 // ═══════════════ 订阅存取 ═══════════════
+
+/** 一条消息发到这个账号的全部渠道（Telegram → Bark → 微信；匿名账号没有 chatId） */
+async function pushToSub(env: Env, sub: UserSub, title: string, body: string): Promise<void> {
+  if (sub.chatId) await tgSend(env, sub.chatId, `${title}\n\n${body}`);
+  if (sub.barkKey) await barkSend(env, sub.barkKey, title, body);
+  if (sub.wxpusherSpt) await wxSend(env, sub.wxpusherSpt, title, body);
+}
 
 async function getSub(env: Env, id: string | number): Promise<UserSub> {
   const key = String(id);
@@ -416,7 +438,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /watch 服务器 房区 区号 房号 — 关注（默认"计划抽"）
 　例：/watch 萌芽池 白银乡 14 43
 /list — 我的关注与倒计时
-/mode 序号 — 切换 计划抽/已报名
+/mode 序号 [申请号码] — 切换 计划抽/已报名，可顺手记下申请号
 /unwatch 序号 — 取消关注
 /lead 24,1 — 截止前提醒提前量（小时，逗号分隔）
 /notify — 五类提醒的开关（/notify 序号 切换）
@@ -424,7 +446,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /name 名字 — 设置网页版显示的昵称
 /servers — 服务器列表
 /panel — 打开网页面板（免绑定，点按钮即用）
-/link — 电脑浏览器用的网页版链接（含令牌）
+/link — 网页版和桌面端的登录令牌（含整链接）
 /help — 本帮助
 
 提醒时机：报名截止前 / 开奖 / 公示期确认归属死线 / 抽签金返还死线 / 下轮开抽
@@ -536,9 +558,15 @@ ${r.msg}`);
 
     case '/link': {
       const token = await bindToken(env, chatId);
+      // <code> 在 Telegram 里点一下就复制，省得从长链接里抠 u/k
       await tgSend(env, chatId,
-        `🔗 电脑浏览器用这个链接打开网页版：\n${WEB_BASE}/#u=${chatId}&k=${token}`
-        + `\n（含你的专属令牌，别分享给他人。在 Telegram 里直接用 /panel 更方便）`);
+        '🔗 登录用的两串（点一下复制）\n\n'
+        + `u\n<code>${chatId}</code>\n\n`
+        + `k\n<code>${token}</code>\n\n`
+        + '桌面端和电脑浏览器可以直接粘这条整链接：\n'
+        + `<code>${WEB_BASE}/#u=${chatId}&amp;k=${token}</code>\n\n`
+        + '在 Telegram 里用 /panel 免登录。',
+        'HTML');
       return;
     }
 
@@ -606,7 +634,7 @@ ${r.msg}`);
         const w = sub.items[i];
         const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
         const pos = `${i + 1}. ${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?'}]`;
-        const modeText = w.mode === 0 ? '计划抽' : '已报名';
+        const modeText = (w.mode === 0 ? '计划抽' : '已报名') + (w.entryNo ? ` #${w.entryNo}` : '');
         try {
           const sales = await getSales(env, w.server);
           const house = sales.find(h => h.Area === w.area && h.Slot === w.slot && h.ID === w.id);
@@ -634,8 +662,12 @@ ${r.msg}`);
       const item = sub.items[n - 1];
       item.mode = item.mode === 0 ? 1 : 0;
       item.fired = [];
+      // /mode 序号 号码 —— 号码是游戏里报名后给的申请号，纯备忘，可不填
+      item.entryNo = item.mode === 1 ? (args[1] ?? '').trim().slice(0, 16) || undefined : undefined;
       await saveSub(env, sub);
-      await tgSend(env, chatId, `第 ${n} 项已切换为「${item.mode === 1 ? '已报名' : '计划抽'}」。`);
+      await tgSend(env, chatId, `第 ${n} 项已切换为「${item.mode === 1 ? '已报名' : '计划抽'}」`
+        + (item.entryNo ? `，申请号码 #${item.entryNo}。` : '。')
+        + (item.mode === 1 && !item.entryNo ? `\n记申请号码：/mode ${n} 号码（可不填）` : ''));
       return;
     }
 
@@ -1104,17 +1136,35 @@ async function runReminders(env: Env): Promise<void> {
         const ref = r.homeRef;
         await tgSendWithButton(env, r.chatId, `${r.title}\n\n${r.body}`,
           '✅ 已进屋（重置倒计时）', `entered:${ref.server}:${ref.area}:${ref.slot}:${ref.id}`);
-      } else if (r.chatId) {
-        await tgSend(env, r.chatId, `${r.title}\n\n${r.body}`);
+        // 渠道优先级：Telegram → Bark → 微信
+        if (sub.barkKey) await barkSend(env, sub.barkKey, r.title, r.body);
+        if (sub.wxpusherSpt) await wxSend(env, sub.wxpusherSpt, r.title, r.body);
+      } else {
+        await pushToSub(env, sub, r.title, r.body);
       }
-      // 渠道优先级：Telegram → Bark → 微信
-      if (sub.barkKey) await barkSend(env, sub.barkKey, r.title, r.body);
-      if (sub.wxpusherSpt) await wxSend(env, sub.wxpusherSpt, r.title, r.body);
     }
     if (dirty) await saveSub(env, sub);
   }
 
   console.log(`提醒检查完成：${subs.length} 个订阅，${serverIds.length} 个服务器`);
+}
+
+/** 「抽了」的回执：房子信息 + 申请号码（填了才有）+ 本轮截止时间 */
+async function pushEntered(env: Env, sub: UserSub, w: WatchItem): Promise<void> {
+  const serverName = ALL_SERVERS.find(x => x.id === w.server)?.name ?? `${w.server}`;
+  const size = SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?';
+  let body = `${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${size}]`;
+  if (w.entryNo) body += `\n申请号码 #${w.entryNo}`;
+  try {
+    const house = (await getSales(env, w.server))
+      .find(h => h.Area === w.area && h.Slot === w.slot && h.ID === w.id);
+    if (house) {
+      const phase = getPhase(house, Math.floor(Date.now() / 1000));
+      body += `\n${phase.state === 1 ? '申请期' : '本阶段'}将于 ${fmtTime(phase.end)} 结束`;
+    }
+  } catch { /* 拿不到房屋数据不影响回执 */ }
+  body += `\n开奖和确认归属的提醒都会照常发。`;
+  await pushToSub(env, sub, '📝 已记下：你报名了', body);
 }
 
 // ═══════════════ Web API ═══════════════
@@ -1135,7 +1185,7 @@ async function enrichWatch(env: Env, sub: UserSub): Promise<unknown[]> {
     const base = {
       server: w.server, serverName, area: w.area, areaName: AREA_NAMES[w.area],
       slot: w.slot, slotNo: w.slot + 1, id: w.id,
-      size: SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?', mode: w.mode,
+      size: SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?', mode: w.mode, entryNo: w.entryNo ?? '',
     };
     try {
       const sales = await getSales(env, w.server);
@@ -1144,10 +1194,14 @@ async function enrichWatch(env: Env, sub: UserSub): Promise<unknown[]> {
         result.push({ ...base, gone: true });
       } else {
         const phase = getPhase(house, nowSec);
+        const rep = (await getReports(env, w.server))[repKey(w.area, w.slot, w.id)];
+        const fresh = rep && nowSec - rep[1] < CYCLE_SEC ? rep : null;
         result.push({
           ...base,
           gone: false,
           price: house.Price,
+          participate: fresh ? fresh[0] : house.Participate,
+          participateAt: fresh ? fresh[1] : 0,
           state: phase.state, stateName: STATE_NAMES[phase.state],
           estimated: phase.estimated, phaseEnd: phase.end,
           stale: nowSec - house.LastSeen > 7200,
@@ -1174,15 +1228,20 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     try {
       const nowSec = Math.floor(Date.now() / 1000);
       const entries = await getSales(env, server);
+      const reports = await getReports(env, server);
       return json(entries.map(h => {
         const phase = getPhase(h, nowSec);
+        // 超过一个周期的旧数据当没有：那是上一轮的人数
+        const rep = reports[repKey(h.Area, h.Slot, h.ID)];
+        const fresh = rep && nowSec - rep[1] < CYCLE_SEC ? rep : null;
         return {
           server: h.Server, area: h.Area, areaName: AREA_NAMES[h.Area] ?? '?',
           slot: h.Slot, slotNo: h.Slot + 1, id: h.ID, price: h.Price,
           size: SIZE_NAMES[h.Size >= 0 && h.Size <= 2 ? h.Size : sizeOf(h.Area, h.ID)] ?? '?',
           state: phase.state, stateName: STATE_NAMES[phase.state],
           estimated: phase.estimated, phaseEnd: phase.end,
-          participate: h.Participate,
+          participate: fresh ? fresh[0] : h.Participate,
+          participateAt: fresh ? fresh[1] : 0,
           stale: nowSec - h.LastSeen > 7200,
           purchaseType: h.PurchaseType, regionType: h.RegionType,
         };
@@ -1194,7 +1253,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
   if (path === '/api/watch' && request.method === 'GET') {
     const chatId = await checkAuth(env, url);
-    if (chatId == null) return json({ error: '未绑定或令牌无效，请通过 Bot /start 获取专属链接' }, 401);
+    if (chatId == null) return json({ error: '未绑定或令牌无效，给 Bot 发 /link 拿新链接' }, 401);
     const sub = await getSub(env, chatId);
     const nowSec = Math.floor(Date.now() / 1000);
     return json({
@@ -1249,17 +1308,55 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/mode' && request.method === 'POST') {
-    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number };
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number; mode?: number; entryNo?: string };
     const chatId = await checkAuthBody(env, body);
     if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
     const sub = await getSub(env, chatId);
     const item = sub.items.find(i =>
       i.server === body.server && i.area === body.area && i.slot === body.slot && i.id === body.id);
     if (!item) return json({ error: '未找到该关注项' }, 404);
-    item.mode = item.mode === 0 ? 1 : 0;
+    // 带 mode 就是明确指定（插件/桌面端用，重复调用结果一样）；不带才是切换
+    item.mode = body.mode === 0 || body.mode === 1 ? body.mode : item.mode === 0 ? 1 : 0;
     item.fired = [];
+    // 申请号码只在「已报名」时有意义，改回计划抽就清掉
+    item.entryNo = item.mode === 1 ? (body.entryNo ?? '').trim().slice(0, 16) || undefined : undefined;
     await saveSub(env, sub);
+    // 标记「抽了」时回执一条：手机上留个凭据，申请号码也一并记着
+    if (item.mode === 1) await pushEntered(env, sub, item);
     return json({ ok: true, mode: item.mode });
+  }
+
+  // 插件上报门牌上的已抽选人数（游戏内才看得到，售楼中心拿不到）
+  if (path === '/api/report' && request.method === 'POST') {
+    const body = (await request.json()) as {
+      u?: number; k?: string;
+      reports?: { server?: number; area?: number; slot?: number; id?: number; participate?: number }[];
+    };
+    if ((await checkAuthBody(env, body)) == null) return json({ error: '未绑定或令牌无效' }, 401);
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const byServer = new Map<number, Reports>();
+    let count = 0;
+    for (const r of (body.reports ?? []).slice(0, 300)) {
+      const { server, area, slot, id, participate } = r;
+      if (typeof server !== 'number' || !ALL_SERVERS.some(s => s.id === server)) continue;
+      if (typeof area !== 'number' || area < 0 || area > 4) continue;
+      if (typeof slot !== 'number' || slot < 0 || slot > 29) continue;
+      if (typeof id !== 'number' || id < 1 || id > 60) continue;
+      if (typeof participate !== 'number' || participate < 0 || participate > 999) continue;
+      let m = byServer.get(server);
+      if (!m) { m = await getReports(env, server); byServer.set(server, m); }
+      m[repKey(area, slot, id)] = [Math.floor(participate), nowSec];
+      count++;
+    }
+    if (count === 0) return json({ error: 'reports 为空或参数无效' }, 400);
+
+    for (const [server, m] of byServer) {
+      // 顺手清掉超过一个周期的旧记录，别让这个 key 无限长大
+      for (const [k, v] of Object.entries(m)) if (nowSec - v[1] > CYCLE_SEC) delete m[k];
+      await env.KV.put(`rep:${server}`, JSON.stringify(m), { expirationTtl: CYCLE_SEC * 2 });
+    }
+    return json({ ok: true, count });
   }
 
   // 匿名账号：没有 Telegram 也能用。前端第一次写数据时调用

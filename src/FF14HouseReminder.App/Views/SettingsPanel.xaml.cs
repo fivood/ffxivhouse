@@ -45,6 +45,9 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         WxPusherAppToken = p.WxPusherAppToken;
         WxPusherUid = p.WxPusherUid;
 
+        CloudLink = App.Cloud.Linked ? $"u={g.CloudUser}&k={g.CloudToken}" : "";
+        ShowCloudStatus();
+
         LocalIngestEnabled = g.LocalIngestEnabled;
         IngestAddress = $"http://127.0.0.1:{g.LocalIngestPort}/api/ingest";
         LocalIngestToken = g.LocalIngestToken;
@@ -76,6 +79,7 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         set { _telegramChatId = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TelegramChatId))); }
     }
 
+    public string CloudLink { get; set; } = "";
     public bool BarkEnabled { get; set; }
     public string BarkKey { get; set; } = "";
     public bool WxPusherEnabled { get; set; }
@@ -94,6 +98,73 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Notify(params string[] names)
+    {
+        foreach (var n in names) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+    }
+
+    private void ShowCloudStatus()
+    {
+        var g = App.Config.Config.General;
+        CloudStatus.Text = App.Cloud.Linked
+            ? $"已链接 {g.CloudUser}" + (g.CloudSyncedAt is { } t ? $"，上次同步 {t.LocalDateTime:MM-dd HH:mm}" : "")
+            : "未链接：关注和房产只存在本机";
+    }
+
+    private async void LinkCloud_Click(object sender, RoutedEventArgs e)
+    {
+        var parsed = CloudSyncService.ParseLink(CloudLink);
+        if (parsed == null)
+        {
+            CloudStatus.Text = "没认出账号：粘 Bot 给的链接，或形如 u=xxx&k=xxx";
+            return;
+        }
+        var g = App.Config.Config.General;
+        var first = !App.Cloud.Linked;
+        g.CloudUser = parsed.Value.U;
+        g.CloudToken = parsed.Value.K;
+        App.Config.Save();
+
+        CloudStatus.Text = "同步中…";
+        try
+        {
+            // 首次链接：先把本机已有的关注和房产推上去，再整份拉回，避免本地数据被云端覆盖丢掉
+            var pushed = first ? await App.Cloud.PushLocalAsync() : 0;
+            // 云端会负责 TG/Bark/微信，桌面端只留 Windows 通知，免得同一条提醒来两遍
+            var p = App.Config.Config.Push;
+            var muted = p.TelegramEnabled || p.BarkEnabled || p.WxPusherEnabled;
+            p.TelegramEnabled = p.BarkEnabled = p.WxPusherEnabled = false;
+            App.Config.Save();
+            TelegramEnabled = BarkEnabled = WxPusherEnabled = false;
+            Notify(nameof(TelegramEnabled), nameof(BarkEnabled), nameof(WxPusherEnabled));
+            // 走主界面那条：拉列表 + 重算提醒（顺带刷新任务计划）+ 刷新关注/房产列表
+            if (Application.Current.MainWindow?.DataContext is ViewModels.MainViewModel vm)
+                await vm.PullCloudAsync(force: true);
+            else await App.Cloud.PullAsync();
+            ShowCloudStatus();
+            if (pushed > 0) CloudStatus.Text += $"（本机 {pushed} 条已并入云端）";
+            if (muted) CloudStatus.Text += "；桌面端的 TG/Bark/微信已关闭，改由云端推送";
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("链接云端账号失败", ex);
+            g.CloudUser = g.CloudToken = "";
+            App.Config.Save();
+            CloudStatus.Text = "链接失败：令牌不对或网络不通";
+        }
+    }
+
+    private void UnlinkCloud_Click(object sender, RoutedEventArgs e)
+    {
+        var g = App.Config.Config.General;
+        g.CloudUser = g.CloudToken = "";
+        g.CloudSyncedAt = null;
+        App.Config.Save();
+        CloudLink = "";
+        Notify(nameof(CloudLink));
+        ShowCloudStatus();
+    }
 
     private async void TestPush_Click(object sender, RoutedEventArgs e)
     {

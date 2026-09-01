@@ -58,6 +58,18 @@
                 <CheckBox Content="开机自动启动" IsChecked="{Binding AutoStart}"/>
                 <CheckBox Content="启动时检查新版本" IsChecked="{Binding CheckUpdates}"/>
 
+                <TextBlock Text="── 网页 / Bot 账号" Style="{StaticResource H}"/>
+                <TextBlock Foreground="#8A8A80" FontSize="11" TextWrapping="Wrap"
+                           Text="链接后三端共用一份关注和房产，以云端为准。程序没开时照旧靠任务计划弹提醒。"/>
+                <TextBlock Text="绑定链接（或 u=..&amp;k=..）：" Margin="0,6,0,0"
+                           ToolTip="Telegram 里给 Bot 发 /link 拿到；网页版右上角齿轮里也有"/>
+                <TextBox Text="{Binding CloudLink}" ToolTip="粘贴 Bot 给的链接即可，会自动解析出账号和令牌"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="链接并同步" Style="{StaticResource Btn}" Click="LinkCloud_Click"/>
+                    <Button Content="解除链接" Style="{StaticResource Btn}" Click="UnlinkCloud_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="CloudStatus" Foreground="#8A8A80" FontSize="11" TextWrapping="Wrap"/>
+
                 <TextBlock Text="── 推送渠道" Style="{StaticResource H}"/>
                 <CheckBox Content="Windows 通知（Toast）" IsChecked="{Binding UseToast}"/>
 

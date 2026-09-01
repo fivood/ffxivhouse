@@ -49,6 +49,10 @@ public partial class WatchViewModel : ObservableObject
     /// <summary>仅申请期允许切换报名状态（准备期/公示期防止误点）</summary>
     [ObservableProperty] private bool _canToggleMode;
 
+    /// <summary>点了「抽了」之后就地问一句申请号码</summary>
+    [ObservableProperty] private bool _asking;
+    [ObservableProperty] private string _entryNoInput = "";
+
     public WatchViewModel(WatchItem item, DataStore store, ReminderEngine reminders, DateTimeOffset now)
     {
         Item = item;
@@ -57,8 +61,9 @@ public partial class WatchViewModel : ObservableObject
     }
 
     public string DisplayName => Item.DisplayName;
-    public string ModeText => Item.Mode == WatchMode.Planned ? "计划抽" : "已报名";
-    public string ToggleModeText => Item.Mode == WatchMode.Planned ? "🏳 标记已报名" : "✔ 改回计划抽";
+    public string ModeText => (Item.Mode == WatchMode.Planned ? "计划抽" : "已报名")
+        + (Item.EntryNo.Length > 0 ? $" #{Item.EntryNo}" : "");
+    public string ToggleModeText => Item.Mode == WatchMode.Planned ? "抽了" : "✔ 改回计划抽";
     public string SizeName => GameData.GetSizeName(GameData.GetSize(Item.Area, Item.Id));
 
     public void Refresh(DateTimeOffset now)

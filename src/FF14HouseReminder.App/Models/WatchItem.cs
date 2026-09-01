@@ -17,6 +17,9 @@ public class WatchItem
     /// <summary>已触发过的提醒 Key，用于去重</summary>
     public HashSet<string> FiredReminders { get; set; } = [];
 
+    /// <summary>申请号码（游戏里报名后给的号），纯备忘，可不填</summary>
+    public string EntryNo { get; set; } = "";
+
     /// <summary>
     /// 抽签金返还死线。公示期见到「已报名」时记在这里。
     /// 死线在公示期结束后 90 天，那时房子早已从在售列表消失、阶段也不是公示期了，
@@ -93,6 +96,12 @@ public class GeneralSettings
     public bool LocalIngestEnabled { get; set; } = true;
     public int LocalIngestPort { get; set; } = 17863;
     public string LocalIngestToken { get; set; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>网页/Bot 账号（u/k）。填了就以云端列表为准，三端共用一份关注和房产</summary>
+    public string CloudUser { get; set; } = "";
+    public string CloudToken { get; set; } = "";
+    /// <summary>上次成功同步的时间</summary>
+    public DateTimeOffset? CloudSyncedAt { get; set; }
 
     public bool CheckUpdates { get; set; } = true;
     public string UpdateCheckUrl { get; set; } =

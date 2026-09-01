@@ -255,6 +255,10 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
                             <StackPanel Grid.Column="0">
                                 <TextBlock FontWeight="Bold" FontSize="13">
                                     <Run Text="{Binding DisplayName, Mode=OneWay}"/>
@@ -283,6 +287,19 @@
                                         CommandParameter="{Binding}"/>
                                 <Button Content="🗑" Style="{StaticResource RetroBtn}" ToolTip="移除关注"
                                         Command="{Binding DataContext.RemoveWatchCommand,
+                                            RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                        CommandParameter="{Binding}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,5,0,0"
+                                        Visibility="{Binding Asking, Converter={StaticResource BoolToVis}}">
+                                <TextBox Width="150" MaxLength="16" Text="{Binding EntryNoInput, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="游戏里报名后给的申请号码，可不填，只是做个备忘"/>
+                                <Button Content="确定" Style="{StaticResource RetroBtn}" Margin="4,0,0,0"
+                                        Command="{Binding DataContext.ConfirmEnteredCommand,
+                                            RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                        CommandParameter="{Binding}"/>
+                                <Button Content="取消" Style="{StaticResource RetroBtn}" Margin="4,0,0,0"
+                                        Command="{Binding DataContext.CancelEnteredCommand,
                                             RelativeSource={RelativeSource AncestorType=ListBox}}"
                                         CommandParameter="{Binding}"/>
                             </StackPanel>
@@ -343,7 +360,7 @@
                                             </Button.Style>
                                         </Button>
                                         <DatePicker SelectedDate="{Binding BackfillDate}" Width="105" Margin="0,0,4,0"
-                                                    DisplayDateEnd="{Binding DataContext.Today,
+                                                    DisplayDateEnd="{Binding DataContext.Today, Mode=OneWay,
                                                         RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                     ToolTip="补签或炸房日期，留空按今天"/>
                                         <Button Content="🗓" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"

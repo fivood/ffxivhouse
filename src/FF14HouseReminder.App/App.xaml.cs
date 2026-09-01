@@ -22,6 +22,7 @@ public partial class App : Application
     public static LocalIngestServer? Ingest { get; private set; }
 #endif
     public static UpdateService Updates { get; private set; } = null!;
+    public static CloudSyncService Cloud { get; private set; } = null!;
 
     private async void OnStartup(object sender, StartupEventArgs e)
     {
@@ -55,6 +56,14 @@ public partial class App : Application
             return;
         }
 
+        // --refresh 模式：任务计划每天叫醒一次，只拉数据重排提醒，不开窗口
+        if (e.Args.Contains("--refresh"))
+        {
+            await RunRefreshModeAsync();
+            Shutdown();
+            return;
+        }
+
         // 单实例
         _mutex = new Mutex(true, "FF14HouseReminder_SingleInstance", out var isNew);
         if (!isNew)
@@ -78,6 +87,7 @@ public partial class App : Application
         Reminders = new ReminderEngine(Config, Store, Push, TaskSync);
         Polling = new PollingService(Config, Api, Store, Reminders);
         Updates = new UpdateService();
+        Cloud = new CloudSyncService(Config);
 
         Logger.Info("初始化托盘");
         InitTray();
@@ -145,6 +155,59 @@ public partial class App : Application
         catch (Exception ex)
         {
             Logger.Error($"[notify 模式] 触发失败 {reminderKey}", ex);
+        }
+    }
+
+    /// <summary>
+    /// 任务计划每天调一次的无窗口刷新：拉数据 → 重排提醒 → 更新任务计划。
+    /// Recompute 只覆盖到之后两个阶段（约两周），程序长期不开时靠这个把队列续上。
+    /// </summary>
+    private static async Task RunRefreshModeAsync()
+    {
+        try
+        {
+            // 程序正开着的话它自己在轮询，这里让开，免得两边各弹一次
+            using var mutex = new Mutex(true, "FF14HouseReminder_SingleInstance", out var isNew);
+            if (!isNew) return;
+
+            var store = new DataStore();
+            using var api = new HousingApiClient();
+            var toast = new ToastService();
+            toast.Initialize();
+            using var push = new PushService(Config, toast);
+            var reminders = new ReminderEngine(Config, store, push, new TaskSchedulerSync());
+
+            Cloud = new CloudSyncService(Config);
+            if (Cloud.Linked)
+            {
+                try { await Cloud.PullAsync(); }
+                catch (Exception ex) { Logger.Error("[refresh 模式] 拉取云端失败", ex); }
+            }
+
+            var fetched = true;
+            foreach (var server in Config.Config.WatchList.Select(w => w.Server).Distinct())
+            {
+                try { store.MergeRemote(server, await api.GetSalesAsync(server)); }
+                catch (Exception ex)
+                {
+                    fetched = false;
+                    Logger.Error($"[refresh 模式] 拉取服务器 {server} 失败", ex);
+                }
+            }
+            // 数据缺一块就整轮不动：现成的任务计划比按残缺数据重排出来的强
+            if (!fetched)
+            {
+                Logger.Warn("[refresh 模式] 有服务器拉取失败，保持原有提醒计划");
+                return;
+            }
+
+            reminders.Recompute();
+            await reminders.FireDueAsync();
+            Logger.Info("[refresh 模式] 已重排提醒计划");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("[refresh 模式] 失败", ex);
         }
     }
 
