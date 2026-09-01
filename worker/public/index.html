@@ -315,6 +315,21 @@
     <div class="chips" id="leadChips"></div>
     <span class="meta">可多选；微信渠道有频率限制（约 20 条/天），建议不超过 3 个</span>
     <br>
+    <span class="meta">推送顺序：Telegram → Bark → 微信，开哪个收哪个。</span>
+    <button class="wx-toggle" id="barkToggle" onclick="toggleBark()">
+      <span id="barkArrow">▸</span> Bark 推送（可选，iOS）<span id="barkMiniStatus" style="color:var(--green)"></span>
+    </button>
+    <div id="barkSection" style="display:none">
+      <span class="meta">iOS 上最省事的一条通道：装 <a href="https://apps.apple.com/app/bark-customed-notifications/id1403753865" target="_blank">Bark</a>，
+      打开 App 复制那串 key（或整条推送地址）粘进来即可，不用注册账号。自建服务器就直接填完整地址。</span>
+      <div class="row" style="margin-top:6px">
+        <input type="text" id="barkInput" placeholder="设备 key 或完整地址，留空则关闭" style="flex:1">
+        <button onclick="saveBark()" class="icon-btn" title="保存 Bark 推送设置">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        </button>
+      </div>
+      <span class="meta" id="barkStatus"></span>
+    </div>
     <button class="wx-toggle" id="wxToggle" onclick="toggleWx()">
       <span id="wxArrow">▸</span> 微信推送（可选，走 WxPusher APP）<span id="wxMiniStatus" style="color:var(--green)"></span>
     </button>
@@ -494,6 +509,9 @@ async function loadWatch() {
     renderChips();
     renderHomes();
     $('homeSection').style.display = 'block';
+    $('barkInput').value = data.barkKey || '';
+    $('barkStatus').textContent = data.barkKey ? '✅ Bark 推送已开启' : '';
+    $('barkMiniStatus').textContent = data.barkKey ? ' ✅已开启' : '';
     $('wxUidInput').value = data.wxpusherSpt || '';
     $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
     $('wxMiniStatus').textContent = data.wxpusherSpt ? ' ✅已开启' : '';
@@ -798,6 +816,25 @@ function toggleQr() {
   const showing = box.style.display !== 'none';
   box.style.display = showing ? 'none' : 'block';
   $('qrBtn').classList.toggle('on', !showing);
+}
+
+function toggleBark() {
+  const box = $('barkSection');
+  const showing = box.style.display !== 'none';
+  box.style.display = showing ? 'none' : 'block';
+  $('barkArrow').textContent = showing ? '▸' : '▾';
+}
+
+async function saveBark() {
+  const resp = await api('POST', '/api/bark', { key: $('barkInput').value.trim() });
+  const data = await resp.json();
+  if (resp.ok) {
+    $('barkStatus').textContent = data.barkKey ? '✅ Bark 推送已开启' : '已关闭 Bark 推送';
+    $('barkMiniStatus').textContent = data.barkKey ? ' ✅已开启' : '';
+    toast('已保存');
+  } else {
+    toast(data.error || '保存失败');
+  }
 }
 
 function toggleWx() {

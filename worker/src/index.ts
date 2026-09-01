@@ -134,6 +134,8 @@ interface UserSub {
   items: WatchItem[];
   /** 我的房产（炸房提醒） */
   homes?: HomeEntry[];
+  /** 可选：Bark 设备 key，或自建服务器的完整地址（iOS 渠道） */
+  barkKey?: string;
   /** 可选：WxPusher 极简推送 SPT（微信渠道） */
   wxpusherSpt?: string;
   /** 可选：自定义昵称（网页顶部显示） */
@@ -266,6 +268,20 @@ async function tgAnswerCallback(env: Env, callbackId: string, text: string): Pro
 }
 
 /** WxPusher 极简推送（SPT，用户自助扫码获取，微信渠道） */
+/** Bark（iOS）。填 device key 走官方服务器，填完整 URL 则用自建的 */
+async function barkSend(env: Env, keyOrUrl: string, title: string, body: string): Promise<void> {
+  const base = /^https?:\/\//i.test(keyOrUrl)
+    ? keyOrUrl.replace(/\/+$/, '')
+    : `https://api.day.app/${encodeURIComponent(keyOrUrl)}`;
+  const resp = await fetch(base, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+    // group 让同类提醒在通知中心折叠到一起
+    body: JSON.stringify({ title, body, group: '抽房了吗' }),
+  });
+  if (!resp.ok) console.error(`barkSend 失败 ${resp.status}: ${await resp.text()}`);
+}
+
 async function wxSend(env: Env, spt: string, title: string, body: string): Promise<void> {
   const resp = await fetch('https://wxpusher.zjiecode.com/api/send/message/simple-push', {
     method: 'POST',
@@ -385,6 +401,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /unwatch 序号 — 取消关注
 /lead 24,1 — 截止前提醒提前量（小时，逗号分隔）
 /notify — 五类提醒的开关（/notify 序号 切换）
+/bark key — Bark 推送（iOS）；/bark off 关闭
 /name 名字 — 设置网页版显示的昵称
 /servers — 服务器列表
 /panel — 打开网页面板（免绑定，点按钮即用）
@@ -458,6 +475,34 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
         '🌐 打开面板');
       return;
     }
+    case '/bark': {
+      const raw = (args[0] ?? '').trim();
+      const sub2 = await getSub(env, chatId);
+      if (!raw) {
+        await tgSend(env, chatId, sub2.barkKey
+          ? `当前 Bark：${sub2.barkKey.slice(0, 6)}…（发 /bark off 关闭）`
+          : 'Bark（iOS）：装 Bark App，把里面那串 key 发过来，例 /bark AbCd1234'
+            + `\n自建服务器就发完整地址。`);
+        return;
+      }
+      if (raw === 'off' || raw === '关闭') {
+        delete sub2.barkKey;
+        await saveSub(env, sub2);
+        await tgSend(env, chatId, '已关闭 Bark 推送。');
+        return;
+      }
+      const ok = /^https?:\/\//i.test(raw) || /^[A-Za-z0-9_-]{6,64}$/.test(raw);
+      if (!ok) {
+        await tgSend(env, chatId, 'key 格式不对：应是一串字母数字，或自建服务器的完整地址。');
+        return;
+      }
+      sub2.barkKey = /^https?:\/\//i.test(raw) ? raw.replace(/\/+$/, '') : raw;
+      await saveSub(env, sub2);
+      await barkSend(env, sub2.barkKey, '抽房了吗', 'Bark 推送已开启，这是一条测试。');
+      await tgSend(env, chatId, '已开启 Bark 推送，刚给你发了一条测试，收到就是通了。');
+      return;
+    }
+
     case '/link': {
       const token = await bindToken(env, chatId);
       await tgSend(env, chatId,
@@ -1030,6 +1075,8 @@ async function runReminders(env: Env): Promise<void> {
       } else {
         await tgSend(env, r.chatId, `${r.title}\n\n${r.body}`);
       }
+      // 渠道优先级：Telegram → Bark → 微信
+      if (sub.barkKey) await barkSend(env, sub.barkKey, r.title, r.body);
       if (sub.wxpusherSpt) await wxSend(env, sub.wxpusherSpt, r.title, r.body);
     }
     if (dirty) await saveSub(env, sub);
@@ -1121,6 +1168,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json({
       leadHours: sub.leadHours,
       notify: sub.notify ?? NOTIFY_ALL,
+      barkKey: sub.barkKey ?? '',
       wxpusherSpt: sub.wxpusherSpt ?? '',
       nickname: sub.nickname ?? '',
       homes: (sub.homes ?? []).map(h => ({
@@ -1297,6 +1345,22 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     home.fired = [];
     await saveSub(env, sub);
     return json({ ok: true, demolishedAt: home.demolishedAt });
+  }
+
+  if (path === '/api/bark' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; key?: string };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    let key = (body.key ?? '').trim();
+    // 允许直接粘 Bark App 里那条完整推送地址，自动剥成 key / 自建服务器地址
+    if (/^https?:\/\//i.test(key)) key = key.replace(/\/+$/, '');
+    else if (key && !/^[A-Za-z0-9_-]{6,64}$/.test(key)) {
+      return json({ error: 'Bark key 格式不对（应是一串字母数字，或自建服务器的完整地址）' }, 400);
+    }
+    const sub2 = await getSub(env, chatId);
+    if (key) sub2.barkKey = key; else delete sub2.barkKey;
+    await saveSub(env, sub2);
+    return json({ ok: true, barkKey: sub2.barkKey ?? '' });
   }
 
   if (path === '/api/wxpusher' && request.method === 'POST') {

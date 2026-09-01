@@ -75,6 +75,10 @@ public class PushSettings
     public string TelegramBotToken { get; set; } = "";
     public string TelegramChatId { get; set; } = "";
 
+    public bool BarkEnabled { get; set; }
+    /// <summary>Bark 设备 key，或自建服务器的完整地址</summary>
+    public string BarkKey { get; set; } = "";
+
     public bool WxPusherEnabled { get; set; }
     public string WxPusherAppToken { get; set; } = "";
     public string WxPusherUid { get; set; } = "";

@@ -39,6 +39,8 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         TelegramEnabled = p.TelegramEnabled;
         TelegramBotToken = p.TelegramBotToken;
         TelegramChatId = p.TelegramChatId;
+        BarkEnabled = p.BarkEnabled;
+        BarkKey = p.BarkKey;
         WxPusherEnabled = p.WxPusherEnabled;
         WxPusherAppToken = p.WxPusherAppToken;
         WxPusherUid = p.WxPusherUid;
@@ -74,6 +76,8 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         set { _telegramChatId = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TelegramChatId))); }
     }
 
+    public bool BarkEnabled { get; set; }
+    public string BarkKey { get; set; } = "";
     public bool WxPusherEnabled { get; set; }
     public string WxPusherAppToken { get; set; } = "";
     public string WxPusherUid { get; set; } = "";
@@ -208,6 +212,8 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         p.TelegramEnabled = TelegramEnabled;
         p.TelegramBotToken = TelegramBotToken.Trim();
         p.TelegramChatId = TelegramChatId.Trim();
+        p.BarkEnabled = BarkEnabled;
+        p.BarkKey = BarkKey.Trim();
         p.WxPusherEnabled = WxPusherEnabled;
         p.WxPusherAppToken = WxPusherAppToken.Trim();
         p.WxPusherUid = WxPusherUid.Trim();

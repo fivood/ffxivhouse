@@ -58,6 +58,11 @@ public class PushService : IDisposable
             yield return new TelegramChannel(_http, settings.TelegramBotToken, settings.TelegramChatId);
         }
 
+        if (settings.BarkEnabled && !string.IsNullOrWhiteSpace(settings.BarkKey))
+        {
+            yield return new BarkChannel(_http, settings.BarkKey);
+        }
+
         if (settings.WxPusherEnabled
             && !string.IsNullOrWhiteSpace(settings.WxPusherAppToken)
             && !string.IsNullOrWhiteSpace(settings.WxPusherUid))
@@ -79,6 +84,22 @@ public class TelegramChannel(HttpClient http, string botToken, string chatId) : 
         var resp = await http.PostAsJsonAsync(
             $"https://api.telegram.org/bot{botToken}/sendMessage",
             new { chat_id = chatId, text = $"【{title}】\n{body}" }, ct);
+        resp.EnsureSuccessStatusCode();
+    }
+}
+
+/// <summary>Bark 推送（iOS）。填 device key 走官方服务器，填完整 URL 则用自建的</summary>
+public class BarkChannel(HttpClient http, string keyOrUrl) : IPushChannel
+{
+    public string Name => "Bark";
+
+    public async Task SendAsync(string title, string body, CancellationToken ct = default)
+    {
+        var baseUrl = keyOrUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+            ? keyOrUrl.TrimEnd('/')
+            : $"https://api.day.app/{Uri.EscapeDataString(keyOrUrl)}";
+        // group 让同类提醒在通知中心折叠到一起
+        var resp = await http.PostAsJsonAsync(baseUrl, new { title, body, group = "抽房了吗" }, ct);
         resp.EnsureSuccessStatusCode();
     }
 }
