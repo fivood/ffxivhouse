@@ -19,11 +19,17 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   a { color: var(--link); }
   a:hover { color: var(--link-hover); }
+  /* 整个应用固定在一屏里：外壳不滚，只有内容区自己滚。
+     100dvh 是为了手机浏览器地址栏收放时不跳；不支持的浏览器退回 100vh */
+  html, body { height: 100%; }
   body {
     background: var(--bg); color: var(--text);
     font-family: Tahoma, "Microsoft YaHei UI", sans-serif; font-size: 14px; line-height: 1.6;
     max-width: 640px; margin: 0 auto; padding: 10px;
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column; overflow: hidden;
   }
+  .layout { flex: 1; min-height: 0; }
   h1 { font-size: 20px; color: #55554A; margin-bottom: 10px; }
   h1 em { font-style: normal; font-size: 13px; color: var(--olive); }
   .strip {
@@ -139,25 +145,27 @@
   /* 只给绑定面板那两个输入框用；登记表单也套了 .bind-box 当容器，别把它的网格顶歪 */
   #bindPanel input { width: 100%; margin: 5px 0; }
   .lead-input { width: 90px; }
-  /* ── 布局：窄屏单列（侧栏容器不参与布局，关注区照旧整页吸顶）── */
+  /* ── 布局 ── */
+  /* 窄屏：单列，整块内容一起滚（页面本身不滚） */
   .col-side { display: contents; }
+  .layout { overflow-y: auto; -webkit-overflow-scrolling: touch; }
   @media (min-width: 900px) {
     body { max-width: 1180px; }
     /* 上边距要 > 吸顶遮挡条的 10px，否则页头那行说明会被盖住半截 */
-    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 16px; align-items: start;
-              margin-top: 20px; }
-    .col-main { grid-column: 1; grid-row: 1; min-width: 0; }
+    /* 宽屏：两栏各自滚，外壳不动 */
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 372px; gap: 16px;
+              align-items: stretch; margin-top: 10px; overflow: hidden; }
+    .col-main {
+      grid-column: 1; grid-row: 1; min-width: 0;
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    #salesList { flex: 1; min-height: 0; overflow-y: auto; }
     .col-side {
       display: flex; flex-direction: column; gap: 14px;
-      grid-column: 2; grid-row: 1;
+      grid-column: 2; grid-row: 1; min-height: 0; overflow-y: auto;
     }
     /* 两栏顶端对齐：块间距交给 gap，标题条不再自带上边距 */
     .col-main .strip, .col-side .strip { margin-top: 0; }
-    /* 标题条 + 筛选栏吸顶，滚动时下拉框始终可用；顶部留白与侧栏一致 */
-    .sales-head { position: sticky; top: 10px; z-index: 15; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
-    .sales-head::before {   /* 盖住吸顶留白，避免卡片从缝里露出来 */
-      content: ''; position: absolute; left: 0; right: 0; top: -10px; height: 10px; background: var(--bg);
-    }
   }
   /* 更宽时在售列表两列卡片 */
   @media (min-width: 1100px) {
