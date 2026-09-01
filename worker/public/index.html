@@ -197,6 +197,15 @@
     .home-actions .lbl { display: inline; }   /* 手指没有悬停，标签必须写出来 */
     .filters select { flex: 1 1 46%; }
   }
+  /* 滚动条：4px 直角细条。Chrome 里一旦写了 scrollbar-width，::-webkit-* 就失效，
+     所以标准写法只留给不认 ::-webkit-scrollbar 的浏览器（Firefox） */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--link); border-radius: 0; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: var(--link) transparent; }
+  }
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
     background: #55554A; color: #fff; padding: 10px 18px; font-size: 13px;
