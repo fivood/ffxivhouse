@@ -18,10 +18,13 @@
     <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
   </PropertyGroup>
 
-  <!-- 公开版构建：dotnet build/publish -p:PublicBuild=true，剥离本地直报功能 -->
-  <PropertyGroup Condition="'$(PublicBuild)'=='true'">
-    <DefineConstants>$(DefineConstants);PUBLIC_BUILD</DefineConstants>
+  <!-- 默认构建即公开版。附加功能靠 -p:FullBuild=true 显式打开，对应源文件不在本仓库 -->
+  <PropertyGroup Condition="'$(FullBuild)'=='true'">
+    <DefineConstants>$(DefineConstants);FULL_BUILD</DefineConstants>
   </PropertyGroup>
+  <ItemGroup Condition="'$(FullBuild)'!='true'">
+    <Compile Remove="Services\LocalIngestServer.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <Resource Include="Resources\house.ico" />

@@ -48,7 +48,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _salesCountText = "";
 
     /// <summary>是否显示直报状态（公开版编译时不含此功能）</summary>
-    public bool ShowIngestStatus => BuildFlags.HasLocalIngest;
+#if FULL_BUILD
+    public bool ShowIngestStatus => true;
+#else
+    public bool ShowIngestStatus => false;
+#endif
 
     // 筛选（索引绑定，0 表示全部）
     [ObservableProperty] private int _areaFilterIndex;
@@ -151,7 +155,9 @@ public partial class MainViewModel : ObservableObject
         foreach (var w in WatchList) w.Refresh(Now);
         foreach (var h in SalesList) h.Refresh(Now);
         foreach (var h in Homes) h.Refresh(Now);
-        IngestStatusText = BuildFlags.HasLocalIngest && App.Ingest != null ? App.Ingest.StatusText : "";
+#if FULL_BUILD
+        IngestStatusText = App.Ingest?.StatusText ?? "";
+#endif
     }
 
     private void RefreshHomes()

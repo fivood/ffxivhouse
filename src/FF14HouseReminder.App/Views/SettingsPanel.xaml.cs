@@ -47,9 +47,9 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         IngestAddress = $"http://127.0.0.1:{g.LocalIngestPort}/api/ingest";
         LocalIngestToken = g.LocalIngestToken;
 
-        // 公开版不含直报功能
-        if (!BuildFlags.HasLocalIngest)
-            IngestSection.Visibility = Visibility.Collapsed;
+#if !FULL_BUILD
+        IngestSection.Visibility = Visibility.Collapsed;
+#endif
     }
 
     public string LeadHoursText { get; set; } = ""; // 已弃用：提前量改用时间片勾选

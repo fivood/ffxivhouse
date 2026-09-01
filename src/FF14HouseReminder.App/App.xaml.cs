@@ -18,7 +18,9 @@ public partial class App : Application
     public static TaskSchedulerSync TaskSync { get; private set; } = null!;
     public static ReminderEngine Reminders { get; private set; } = null!;
     public static PollingService Polling { get; private set; } = null!;
+#if FULL_BUILD
     public static LocalIngestServer? Ingest { get; private set; }
+#endif
     public static UpdateService Updates { get; private set; } = null!;
 
     private async void OnStartup(object sender, StartupEventArgs e)
@@ -80,11 +82,10 @@ public partial class App : Application
         Logger.Info("初始化托盘");
         InitTray();
 
-        if (BuildFlags.HasLocalIngest)
-        {
-            Ingest = new LocalIngestServer(Config, Store);
-            _ = Ingest.StartAsync();
-        }
+#if FULL_BUILD
+        Ingest = new LocalIngestServer(Config, Store);
+        _ = Ingest.StartAsync();
+#endif
 
         // 自启开关与注册表保持一致
         if (AutoStart.IsEnabled() != Config.Config.General.AutoStart)
@@ -108,13 +109,11 @@ public partial class App : Application
             Config.Config.General.FirstRunCompleted = true;
             Config.Save();
 
-            var hasDalamud = BuildFlags.HasLocalIngest && Directory.Exists(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncherCN"));
-            var hint = hasDalamud
-                ? "检测到你安装了卫月（XIVLauncherCN）！可安装配套插件，" +
-                  "逛房区时自动把本服房屋数据直报到本工具（不经过网站，数据更准）。\n" +
-                  "插件地址与令牌见：设置 → 本地直报。"
-                : "";
+#if FULL_BUILD
+            var hint = LocalIngestServer.FirstRunHint();
+#else
+            var hint = "";
+#endif
             MessageBox.Show(
                 "欢迎使用「抽房了吗」！\n\n" +
                 "使用方式：选择服务器 → 浏览在售房屋 → 点击「＋关注」即可设置提醒。\n" +
@@ -186,7 +185,9 @@ public partial class App : Application
         try { Config.Save(); } catch { }
         _trayIcon?.Dispose();
         Polling?.Dispose();
+#if FULL_BUILD
         Ingest?.Dispose();
+#endif
         Api?.Dispose();
         Push?.Dispose();
         Updates?.Dispose();

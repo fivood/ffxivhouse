@@ -25,7 +25,7 @@ jobs:
           $ver = "${env:GITHUB_REF_NAME}".TrimStart('v')
           Remove-Item src\FF14HouseReminder.App\obj -Recurse -Force -ErrorAction SilentlyContinue
           dotnet publish src\FF14HouseReminder.App -c Release -r win-x64 --self-contained `
-            -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:PublicBuild=true `
+            -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true `
             -p:Version=$ver -p:AssemblyInformationalVersion=$ver `
             -o publish\public
 

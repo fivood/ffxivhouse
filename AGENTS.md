@@ -7,17 +7,17 @@ FF14HouseReminder：国服 FF14 房屋抽签时间提醒 WPF 桌面端（net8.0-
 - `src/FF14HouseReminder.App`：WPF 桌面端
 - `worker/`：Cloudflare Workers 版提醒 Bot（Telegram 交互 + Cron 定时推送，给朋友零安装使用），见 `worker/README.md`
 
-配套的游戏内数据直报插件在**另一个仓库**（G:\HouseWatcher，不公开发布），本仓库的公开构建通过
-`-p:PublicBuild=true`（定义 `PUBLIC_BUILD` 常量）剥离本地直报功能，见 `Services/BuildFlags.cs`。
+默认构建即公开版。`-p:FullBuild=true`（定义 `FULL_BUILD` 常量）会额外编译
+`Services/LocalIngestServer.cs`——该文件不在本仓库，缺失时默认构建不受影响。
 
 ## 构建
 
 ```powershell
 dotnet build ffxivhouse.slnx -c Release
-.\publish.ps1          # 打包 full（自用）+ public（公开）两个版本到 publish\
+.\publish.ps1 public   # 打包到 publish\public\
 ```
 
-注意：切换 PublicBuild 编译常量后必须清理 obj 再构建（publish.ps1 已处理）。
+注意：切换 FullBuild 编译常量后必须清理 obj 再构建（publish.ps1 已处理）。
 
 ## 关键约定
 
@@ -26,7 +26,6 @@ dotnet build ffxivhouse.slnx -c Release
 - 售楼中心 API：`https://house.ffxiv.cyou/api/sales?server={id}`，请求必须带 UA `FF14HouseReminder/版本 (+仓库地址)`，轮询 ≥5 分钟。
 - 房屋字段与网站 API 保持一致（PascalCase：`Server/Area/Slot/ID/Price/Size/State/EndTime` 等）。
 - State 语义：0 未知(按 9 天周期=5 天申请+4 天公示推测)、1 申请期、2 公示期、3 准备期；EndTime 为当前阶段结束时间（准备期=下轮开始时间）。
-- 本地直报（仅非公开版）：`POST http://127.0.0.1:17863/api/ingest`，头 `X-Ingest-Token`，体为 `{source, entries:[HouseEntry]}`。
 - 提醒类型见 `Models/Enums.cs` 的 ReminderType；提醒去重 Key 锚定阶段结束时间。
 - 设置是主窗口右侧展开面板（Views/SettingsPanel），不是弹窗。
 

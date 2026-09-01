@@ -93,10 +93,3 @@ public class HouseSnapshot
     public DateTimeOffset EffectiveSeenAt =>
         Source == HouseDataSource.Local ? FetchedAt : Data.LastSeenAt;
 }
-
-/// <summary>本地直报推送体（卫月插件 → 桌面端）</summary>
-public class IngestRequest
-{
-    public string Source { get; set; } = "dalamud";
-    public List<HouseEntry> Entries { get; set; } = [];
-}
