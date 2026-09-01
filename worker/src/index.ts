@@ -127,6 +127,9 @@ interface NotifyFlags {
 const NOTIFY_ALL: NotifyFlags = { entry: true, results: true, claim: true, deposit: true, next: true };
 
 interface UserSub {
+  /** 账号 id，也是 KV key。TG 用户＝chat id 的字符串形式；匿名用户＝随机串 */
+  id?: string;
+  /** TG chat id；匿名账号没有，此时不发 Telegram */
   chatId: number;
   leadHours: number[];
   /** 分项提醒开关，未设置＝全开 */
@@ -305,13 +308,16 @@ async function wxSend(env: Env, spt: string, title: string, body: string): Promi
 
 // ═══════════════ 订阅存取 ═══════════════
 
-async function getSub(env: Env, chatId: number): Promise<UserSub> {
-  return (await env.KV.get<UserSub>(`sub:${chatId}`, 'json'))
-    ?? { chatId, leadHours: [24, 1], items: [] };
+async function getSub(env: Env, id: string | number): Promise<UserSub> {
+  const key = String(id);
+  const sub = (await env.KV.get<UserSub>(`sub:${key}`, 'json'))
+    ?? { chatId: Number(key) || 0, leadHours: [24, 1], items: [] };
+  sub.id = key;   // 老记录里没有 id，读出来时补上
+  return sub;
 }
 
 async function saveSub(env: Env, sub: UserSub): Promise<void> {
-  await env.KV.put(`sub:${sub.chatId}`, JSON.stringify(sub));
+  await env.KV.put(`sub:${sub.id ?? sub.chatId}`, JSON.stringify(sub));
 }
 
 // ═══════════════ Web 绑定令牌（HMAC，免账号体系） ═══════════════
@@ -319,7 +325,7 @@ async function saveSub(env: Env, sub: UserSub): Promise<void> {
 const WEB_BASE = 'https://ff14.70015.net';
 
 /** 用 webhook 密钥对 chatId 做 HMAC，生成绑定令牌（只有 Bot 能发给本人） */
-async function bindToken(env: Env, chatId: number): Promise<string> {
+async function bindToken(env: Env, chatId: string | number): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(env.TG_WEBHOOK_SECRET ?? 'ff14house'),
@@ -375,11 +381,11 @@ async function verifyInitData(env: Env, initData: string): Promise<number | null
 }
 
 /** 校验 u/k 参数，返回 chatId 或 null */
-async function checkAuth(env: Env, url: URL): Promise<number | null> {
-  const chatId = parseInt(url.searchParams.get('u') ?? '', 10);
+async function checkAuth(env: Env, url: URL): Promise<string | null> {
+  const id = (url.searchParams.get('u') ?? '').trim();
   const k = url.searchParams.get('k') ?? '';
-  if (Number.isNaN(chatId) || !k) return null;
-  return (await bindToken(env, chatId)) === k ? chatId : null;
+  if (!/^[A-Za-z0-9]{1,32}$/.test(id) || !k) return null;
+  return (await bindToken(env, id)) === k ? id : null;
 }
 
 /** POST 体的 u/k 校验 */
@@ -1092,11 +1098,12 @@ async function runReminders(env: Env): Promise<void> {
     }
 
     for (const r of due) {
-      if (r.homeRef) {
+      // 匿名账号（没绑 TG）不发 Telegram，只走 Bark / 微信
+      if (r.chatId && r.homeRef) {
         const ref = r.homeRef;
         await tgSendWithButton(env, r.chatId, `${r.title}\n\n${r.body}`,
           '✅ 已进屋（重置倒计时）', `entered:${ref.server}:${ref.area}:${ref.slot}:${ref.id}`);
-      } else {
+      } else if (r.chatId) {
         await tgSend(env, r.chatId, `${r.title}\n\n${r.body}`);
       }
       // 渠道优先级：Telegram → Bark → 微信

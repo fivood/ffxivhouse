@@ -143,7 +143,7 @@
   .reg-form input, .reg-form select, .reg-form button { margin: 0; min-width: 0; width: auto; }
   .reg-form > button { justify-content: center; }
   /* 只给绑定面板那两个输入框用；登记表单也套了 .bind-box 当容器，别把它的网格顶歪 */
-  #bindPanel input { width: 100%; margin: 5px 0; }
+  #tgSection input { width: 100%; margin: 5px 0; }
   .lead-input { width: 90px; }
   /* ── 布局 ── */
   /* 窄屏：单列，整块内容一起滚（页面本身不滚） */
@@ -194,7 +194,7 @@
                      fill: #3F3F38; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
   .strip.foldable { cursor: pointer; user-select: none; }
   /* Mini App 里已经自动登录，绑定引导没用了 */
-  body.in-tg #bindPanel { display: none !important; }
+  body.in-tg #tgToggle, body.in-tg #tgSection { display: none !important; }   /* 小程序里本来就是 TG 账号 */
   .fold { background: transparent; border: none; padding: 0 4px; font-size: 12px;
           color: var(--dim); cursor: pointer; pointer-events: none; }
   /* 纯图标、无边框（顶部刷新用） */
@@ -295,16 +295,6 @@
 <!-- 未绑定提示 -->
 <!-- 房区图之外的部分：一起滚 -->
 <div id="sideScroll">
-<div id="bindPanel" style="display:none">
-  <div class="strip">⊙ 绑定 Telegram 提醒</div>
-  <div class="panel bind-box">
-    在 Telegram 打开 <b>@fivood_house_bot</b> 发 <b>/start</b>，点回复里的链接即可绑定。<br>
-    <span class="meta">也可手动填：链接里 u= 和 k= 后面那两串</span>
-    <input type="text" id="bindU" placeholder="用户 ID（u=）">
-    <input type="text" id="bindK" placeholder="令牌（k=）">
-    <button class="primary" onclick="bindManual()">绑定</button>
-  </div>
-</div>
 
 <!-- 我的关注（吸顶，需直接挂在 body 下才能整页吸附） -->
 <div id="watchSticky" style="display:none">
@@ -393,6 +383,17 @@
     <span class="meta">最多 3 个（微信渠道有频率限制）</span>
     <br>
     <span class="meta">推送顺序：Telegram → Bark → 微信</span>
+    <button class="wx-toggle" id="tgToggle" onclick="toggleTg()">
+      <span id="tgArrow">▸</span> Telegram 推送<span id="tgMiniStatus" style="color:var(--green)"></span>
+    </button>
+    <div id="tgSection" style="display:none">
+      <span class="meta">在 Telegram 打开 <b>@fivood_house_bot</b> 发 <b>/start</b>，点回复里的链接即可绑定。<br>
+      也可手动填：链接里 u= 和 k= 后面那两串</span>
+      <input type="text" id="bindU" placeholder="用户 ID（u=）" style="width:100%;margin:5px 0">
+      <input type="text" id="bindK" placeholder="令牌（k=）" style="width:100%;margin:5px 0">
+      <button class="primary" onclick="bindManual()">绑定</button>
+      <span class="meta" id="tgStatus"></span>
+    </div>
     <button class="wx-toggle" id="barkToggle" onclick="toggleBark()">
       <span id="barkArrow">▸</span> Bark 推送（可选，iOS）<span id="barkMiniStatus" style="color:var(--green)"></span>
     </button>
@@ -488,10 +489,25 @@ function loadCred() {
     if (saved && saved.u && saved.k) cred = saved;
   } catch {}
 }
-function bindManual() {
+async function bindManual() {
   if (!$('bindU').value || !$('bindK').value) return toast('请填写完整');
-  cred = { u: $('bindU').value.trim(), k: $('bindK').value.trim() };
+  const tg = { u: $('bindU').value.trim(), k: $('bindK').value.trim() };
+  const anon = authed() && !/^\d+$/.test(cred.u) ? cred : null;   // 匿名 id 不是纯数字
+  cred = tg;
   localStorage.setItem('ff14house_cred', JSON.stringify(cred));
+  if (anon) {
+    // 把之前匿名攒的关注和房产并进 TG 账号
+    try {
+      const r = await (await fetch('/api/merge', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ u: tg.u, k: tg.k, fromU: anon.u, fromK: anon.k }),
+      })).json();
+      if (r.merged) toast(`已绑定，并入 ${r.merged} 条之前的记录`);
+      else toast('已绑定');
+    } catch { toast('已绑定'); }
+  } else {
+    toast('已绑定');
+  }
   loadWatch();
 }
 const authed = () => cred.u && cred.k;
@@ -546,12 +562,14 @@ async function loadSales(manual) {
 }
 
 async function loadWatch() {
-  if (!authed()) { $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; $('watchSticky').style.display = 'none'; $('homeSection').style.display = 'none'; return; }
+  $('watchSticky').style.display = 'block';
+  $('watchSection').style.display = 'block';
+  $('homeSection').style.display = 'block';
+  if (!authed()) { renderWatch(); renderHomes(); renderNotifyChips(); return; }   // 还没账号，先显示空状态
   try {
     const resp = await fetch(`/api/watch?${qs()}`);
     if (resp.status === 401) {
-      $('bindPanel').style.display = 'block'; $('watchSection').style.display = 'none'; $('watchSticky').style.display = 'none'; $('homeSection').style.display = 'none';
-      return;
+      return;   // 令牌失效，保持空状态
     }
     const data = await resp.json();
     myWatches = data.items || [];
@@ -562,6 +580,9 @@ async function loadWatch() {
     renderChips();
     renderHomes();
     $('homeSection').style.display = 'block';
+    const isTg = /^\d+$/.test(cred.u);
+    $('tgMiniStatus').textContent = isTg ? ' ✅已绑定' : '';
+    $('tgStatus').textContent = isTg ? '当前已绑定 Telegram' : '未绑定，当前用的是本机匿名账号';
     $('barkInput').value = data.barkKey || '';
     $('barkStatus').textContent = data.barkKey ? '✅ Bark 推送已开启' : '';
     $('barkMiniStatus').textContent = data.barkKey ? ' ✅已开启' : '';
@@ -569,7 +590,7 @@ async function loadWatch() {
     $('wxUidStatus').textContent = data.wxpusherSpt ? '✅ 微信推送已开启' : '';
     $('wxMiniStatus').textContent = data.wxpusherSpt ? ' ✅已开启' : '';
     $('nickBadge').textContent = data.nickname ? `👋 ${data.nickname}` : '';
-    $('bindPanel').style.display = 'none';
+
     $('watchSection').style.display = 'block';
     $('watchSticky').style.display = 'block';
     renderWatch();
@@ -807,11 +828,25 @@ function refreshAll() {
   loadWatch();
 }
 async function api(method, path, body) {
+  // 没绑 TG 也能用：第一次写数据时先领一个匿名账号
+  if (!authed()) await ensureAccount();
   const resp = await fetch(path, {
     method, headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify({ ...body, u: +cred.u, k: cred.k }) : undefined,
+    body: body ? JSON.stringify({ ...body, u: cred.u, k: cred.k }) : undefined,
   });
   return resp;
+}
+
+// 领一个匿名账号（存在本机；绑 TG 时会把数据并过去）
+async function ensureAccount() {
+  if (authed()) return true;
+  try {
+    const d = await (await fetch('/api/register', { method: 'POST' })).json();
+    if (!d.u || !d.k) return false;
+    cred = { u: String(d.u), k: d.k };
+    localStorage.setItem('ff14house_cred', JSON.stringify(cred));
+    return true;
+  } catch { return false; }
 }
 // 统一提交：网络错误/服务端报错都有提示，成功才刷新列表
 async function submit(method, path, body, okMsg) {
@@ -828,7 +863,7 @@ async function submit(method, path, body, okMsg) {
 function parseKey(key) { const [server, area, slot, id] = key.split(':').map(Number); return { server, area, slot, id }; }
 
 async function watch(key) {
-  if (!authed()) { $('bindPanel').style.display = 'block'; window.scrollTo(0, 0); return toast('请先绑定 Telegram'); }
+  // 不用先绑 TG：api() 会自动领一个匿名账号
   await submit('POST', '/api/watch', parseKey(key), '已关注');
 }
 // 整张卡片都能点关注（按钮本身的点击不重复触发）
@@ -897,6 +932,13 @@ function toggleQr() {
   const showing = box.style.display !== 'none';
   box.style.display = showing ? 'none' : 'block';
   $('qrBtn').classList.toggle('on', !showing);
+}
+
+function toggleTg() {
+  const box = $('tgSection');
+  const showing = box.style.display !== 'none';
+  box.style.display = showing ? 'none' : 'block';
+  $('tgArrow').textContent = showing ? '▸' : '▾';
 }
 
 function toggleBark() {
@@ -1045,6 +1087,7 @@ if (tgApp) {
 }
 renderNotifyChips();
 renderMapSlots();
+renderSizePick();   // 服务器列表拉失败时也得有尺寸筛选
 drawMap();
 // 窄屏没有悬停，地图摊在首屏只是占地方，默认收起；关注和房产默认展开
 initFold('map', !window.matchMedia('(min-width: 900px)').matches);
