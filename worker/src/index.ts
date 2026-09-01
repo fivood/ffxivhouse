@@ -388,6 +388,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /name 名字 — 设置网页版显示的昵称
 /servers — 服务器列表
 /panel — 打开网页面板（免绑定，点按钮即用）
+/link — 电脑浏览器用的网页版链接（含令牌）
 /help — 本帮助
 
 提醒时机：报名截止前 / 开奖 / 公示期确认归属死线 / 抽签金返还死线 / 下轮开抽
@@ -449,15 +450,22 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
 
   switch (cmd) {
     case '/start': {
-      const token = await bindToken(env, chatId);
-      // 优先给 Mini App 按钮（点开即用，免绑定）；链接留着做备用/换设备
+      // 只说一句 + 面板按钮，命令表交给 /help，别一上来糊一屏
       await tgSendWebApp(env, chatId,
-        `${HELP_TEXT}\n\n🌐 点下面的按钮直接打开面板（免绑定）。`
-        + `\n想在电脑浏览器里用就存这个链接：${WEB_BASE}/#u=${chatId}&k=${token}`
-        + `\n（含你的专属令牌，别分享给他人）`,
+        '🏠 抽房了吗 — FF14 房屋抽签提醒'
+        + `\n\n点下面的按钮打开面板：关注房屋、我的房产、提醒设置都在里面。`
+        + `\n想用命令发 /help，要电脑浏览器用的链接发 /link。`,
         '🌐 打开面板');
       return;
     }
+    case '/link': {
+      const token = await bindToken(env, chatId);
+      await tgSend(env, chatId,
+        `🔗 电脑浏览器用这个链接打开网页版：\n${WEB_BASE}/#u=${chatId}&k=${token}`
+        + `\n（含你的专属令牌，别分享给他人。在 Telegram 里直接用 /panel 更方便）`);
+      return;
+    }
+
     case '/panel': {
       await tgSendWebApp(env, chatId,
         '🌐 面板：在这里管关注、我的房产、提醒开关，还能看房区图。'
