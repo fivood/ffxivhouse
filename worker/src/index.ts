@@ -661,7 +661,6 @@ ${r.msg}`);
       }
       const item = sub.items[n - 1];
       item.mode = item.mode === 0 ? 1 : 0;
-      item.fired = [];
       // /mode 序号 号码 —— 号码是游戏里报名后给的申请号，纯备忘，可不填
       item.entryNo = item.mode === 1 ? (args[1] ?? '').trim().slice(0, 16) || undefined : undefined;
       await saveSub(env, sub);
@@ -1315,14 +1314,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const item = sub.items.find(i =>
       i.server === body.server && i.area === body.area && i.slot === body.slot && i.id === body.id);
     if (!item) return json({ error: '未找到该关注项' }, 404);
+    const was = { mode: item.mode, entryNo: item.entryNo };
     // 带 mode 就是明确指定（插件/桌面端用，重复调用结果一样）；不带才是切换
     item.mode = body.mode === 0 || body.mode === 1 ? body.mode : item.mode === 0 ? 1 : 0;
-    item.fired = [];
     // 申请号码只在「已报名」时有意义，改回计划抽就清掉
     item.entryNo = item.mode === 1 ? (body.entryNo ?? '').trim().slice(0, 16) || undefined : undefined;
     await saveSub(env, sub);
-    // 标记「抽了」时回执一条：手机上留个凭据，申请号码也一并记着
-    if (item.mode === 1) await pushEntered(env, sub, item);
+    // 回执只在真有变化时发：插件会反复上报同一条，没变就别响
+    if (item.mode === 1 && (was.mode !== 1 || was.entryNo !== item.entryNo))
+      await pushEntered(env, sub, item);
     return json({ ok: true, mode: item.mode });
   }
 

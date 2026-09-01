@@ -49,9 +49,14 @@ public partial class WatchViewModel : ObservableObject
     /// <summary>仅申请期允许切换报名状态（准备期/公示期防止误点）</summary>
     [ObservableProperty] private bool _canToggleMode;
 
-    /// <summary>点了「抽了」之后就地问一句申请号码</summary>
+    /// <summary>点了「抽了」之后，按钮就地换成申请号码输入框</summary>
     [ObservableProperty] private bool _asking;
     [ObservableProperty] private string _entryNoInput = "";
+
+    /// <summary>能切换、且不在填号码时，才显示那个按钮</summary>
+    public bool ShowModeButton => CanToggleMode && !Asking;
+    partial void OnAskingChanged(bool value) => OnPropertyChanged(nameof(ShowModeButton));
+    partial void OnCanToggleModeChanged(bool value) => OnPropertyChanged(nameof(ShowModeButton));
 
     public WatchViewModel(WatchItem item, DataStore store, ReminderEngine reminders, DateTimeOffset now)
     {

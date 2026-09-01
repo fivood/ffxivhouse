@@ -281,25 +281,25 @@
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="6,0,0,0">
                                 <Button Content="{Binding ToggleModeText}" Style="{StaticResource RetroBtn}"
                                         Margin="0,0,0,3"
-                                        Visibility="{Binding CanToggleMode, Converter={StaticResource BoolToVis}}"
+                                        Visibility="{Binding ShowModeButton, Converter={StaticResource BoolToVis}}"
                                         Command="{Binding DataContext.ToggleWatchModeCommand,
                                             RelativeSource={RelativeSource AncestorType=ListBox}}"
                                         CommandParameter="{Binding}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,3"
+                                            Visibility="{Binding Asking, Converter={StaticResource BoolToVis}}">
+                                    <TextBox Width="96" MaxLength="16" ToolTip="申请号码，可不填，只是做个备忘"
+                                             Text="{Binding EntryNoInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Button Content="✔" Style="{StaticResource RetroBtn}" Margin="3,0,0,0" ToolTip="确认"
+                                            Command="{Binding DataContext.ConfirmEnteredCommand,
+                                                RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                            CommandParameter="{Binding}"/>
+                                    <Button Content="✕" Style="{StaticResource RetroBtn}" Margin="3,0,0,0" ToolTip="取消"
+                                            Command="{Binding DataContext.CancelEnteredCommand,
+                                                RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                            CommandParameter="{Binding}"/>
+                                </StackPanel>
                                 <Button Content="🗑" Style="{StaticResource RetroBtn}" ToolTip="移除关注"
                                         Command="{Binding DataContext.RemoveWatchCommand,
-                                            RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                        CommandParameter="{Binding}"/>
-                            </StackPanel>
-                            <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,5,0,0"
-                                        Visibility="{Binding Asking, Converter={StaticResource BoolToVis}}">
-                                <TextBox Width="150" MaxLength="16" Text="{Binding EntryNoInput, UpdateSourceTrigger=PropertyChanged}"
-                                         ToolTip="游戏里报名后给的申请号码，可不填，只是做个备忘"/>
-                                <Button Content="确定" Style="{StaticResource RetroBtn}" Margin="4,0,0,0"
-                                        Command="{Binding DataContext.ConfirmEnteredCommand,
-                                            RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                        CommandParameter="{Binding}"/>
-                                <Button Content="取消" Style="{StaticResource RetroBtn}" Margin="4,0,0,0"
-                                        Command="{Binding DataContext.CancelEnteredCommand,
                                             RelativeSource={RelativeSource AncestorType=ListBox}}"
                                         CommandParameter="{Binding}"/>
                             </StackPanel>

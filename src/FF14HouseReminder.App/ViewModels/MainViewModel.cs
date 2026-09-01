@@ -477,12 +477,13 @@ public partial class MainViewModel : ObservableObject
     private void SetWatchMode(WatchViewModel item, WatchMode mode, string entryNo)
     {
         item.Asking = false;
+        var was = (item.Item.Mode, item.Item.EntryNo);
         item.Item.Mode = mode;
         item.Item.EntryNo = entryNo.Length > 16 ? entryNo[..16] : entryNo;
-        item.Item.FiredReminders.Clear();
         _config.Save();
-        // 报名了给自己发条回执（链接了云端的话渠道已关，这里只出 Windows 通知，不会重复）
-        if (mode == WatchMode.Participated)
+        // 报名了给自己发条回执（链接了云端的话渠道已关，这里只出 Windows 通知，不会重复）。
+        // 没变化就不发：反复点确认、插件重复上报都不该再响一次
+        if (mode == WatchMode.Participated && was != (mode, item.Item.EntryNo))
         {
             var body = $"{item.DisplayName} [{item.SizeName}]"
                 + (item.Item.EntryNo.Length > 0 ? $"\n申请号码 #{item.Item.EntryNo}" : "");

@@ -114,6 +114,8 @@
   .icon-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 10px; }
   .icon-btn svg { display: block; }
   .icon-btn.on { background: var(--link); color: #fff; }
+  /* 「抽了」点开后就地变输入框，占的还是按钮那块地方 */
+  .card-actions .entry-inline { width: 130px; margin: 0; min-height: var(--ctl-h); }
   /* 提醒时间多选片 */
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
   /* 尺寸多选：三个小方片，全不选＝全尺寸 */
@@ -616,12 +618,8 @@ async function loadWatch() {
 }
 
 // ── 渲染 ──
-// 门牌人数是玩家进游戏看来的，得标出是什么时候看的，不然没法判断新旧
-const fmtSeen = sec => new Date(sec * 1000).toLocaleString('zh-CN',
-  { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+// 门牌人数只有进游戏点门牌才看得到，没人报过就是未知
 const partText = h => h.participateAt ? `${h.participate}人参与` : '人数未知';
-const partTip = h => h.participateAt
-  ? `玩家 ${fmtSeen(h.participateAt)} 看门牌报的` : '售楼中心拿不到，要进游戏点门牌才知道';
 
 function fmtRemain(targetSec) {
   const span = targetSec - Date.now() / 1000;
@@ -681,13 +679,7 @@ function renderWatch() {
           <button class="icon-btn" onclick="unwatch('${watchKey(w)}')" title="移除关注" aria-label="移除关注">${ico('trash')}</button>
         </span></div>
       <div>${state}${cd}${w.stale ? ` <span class="warn">${ico('warn')} 数据较旧</span>` : ''}</div>
-      <div class="meta" title="${w.state === 1 ? partTip(w) : ''}">${(w.price || 0).toLocaleString()} 金币 · ${PTYPE[w.purchaseType] || ''} · ${REGION[w.regionType] ?? '未知'}${w.state === 1 ? ` · ${partText(w)}` : ''}${w.entryNo ? ` · 申请号 #${w.entryNo}` : ''}</div>
-      ${askingKey === watchKey(w) ? `<div class="row" style="margin-top:6px">
-        <input type="text" id="entryNoInput" maxlength="16" placeholder="申请号码（可不填，仅备忘）" style="flex:1"
-               onkeydown="if (event.key === 'Enter') confirmEntered('${watchKey(w)}')">
-        <button class="icon-btn" onclick="confirmEntered('${watchKey(w)}')">确定</button>
-        <button class="icon-btn plain" onclick="askEntry('')" title="取消">${ico('close')}</button>
-      </div>` : ''}
+      <div class="meta">${(w.price || 0).toLocaleString()} 金币 · ${PTYPE[w.purchaseType] || ''} · ${REGION[w.regionType] ?? '未知'}${w.state === 1 ? ` · ${partText(w)}` : ''}${w.entryNo ? ` · 申请号 #${w.entryNo}` : ''}</div>
     </div>`;
   }).join('');
 }
@@ -755,7 +747,7 @@ function renderSales() {
       <div class="row"><span class="title">${h.areaName} ${h.slotNo}区 ${h.id}号 [${h.size}]</span>
         <button class="watch-btn" ${isW ? 'disabled' : ''} onclick="watch('${key}')">${ico(isW ? 'check' : 'plus')}${isW ? '已关注' : '关注'}</button></div>
       <div><span class="price">${h.price.toLocaleString()} 金币</span>
-        <span class="badge" title="${h.state === 1 ? partTip(h) : ''}"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] ?? '未知'}${h.state === 1 ? ` · ${partText(h)}` : ''}</span></div>
+        <span class="badge"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] ?? '未知'}${h.state === 1 ? ` · ${partText(h)}` : ''}</span></div>
       <div>${state} <span class="countdown" style="color:${URGENCY(h.phaseEnd)}">${fmtRemain(h.phaseEnd)}</span>
         ${h.stale ? ` <span class="warn">${ico('warn')} 数据较旧</span>` : ''}</div>
     </div>`;
@@ -911,6 +903,11 @@ let askingKey = '';
 function modeCtl(w) {
   const key = watchKey(w);
   if (w.state !== 1) return `<span class="badge">${w.mode === 1 ? '已报名' : '计划抽'}</span>`;
+  if (askingKey === key)
+    return `<input type="text" id="entryNoInput" class="entry-inline" maxlength="16" placeholder="申请号码（可不填）"
+                   onkeydown="if (event.key === 'Enter') confirmEntered('${key}')">
+      <button class="icon-btn" onclick="confirmEntered('${key}')" title="确认">${ico('check')}</button>
+      <button class="icon-btn plain" onclick="askEntry('')" title="取消">${ico('close')}</button>`;
   if (w.mode === 1)
     return `<button class="icon-btn" onclick="toggleMode('${key}')" title="点一下改回计划抽">${ico('check')}已报名</button>`;
   return `<button class="icon-btn" onclick="askEntry('${key}')" title="报名了？点一下记下来">${ico('flag')}抽了</button>`;
