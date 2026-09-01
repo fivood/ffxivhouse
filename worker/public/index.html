@@ -73,8 +73,8 @@
   .btn-enter.lit { color: #fff; border-color: rgba(0, 0, 0, .3); }
   .btn-enter.lit:hover:not(:disabled) { filter: brightness(1.12); border-color: rgba(0, 0, 0, .3); }
   .btn-enter.d0 { background: var(--blue); }
-  .btn-enter.d1 { background: var(--green); }
-  .btn-enter.d2 { background: var(--link); }
+  .btn-enter.d1 { background: var(--link); }
+  .btn-enter.d2 { background: var(--green); }
   .btn-enter.d3 { background: var(--amber); }
   .btn-enter.d4 { background: var(--red); }
   .filters { background: var(--strip); border: 1px solid var(--border); border-top: none;
@@ -558,8 +558,10 @@ function renderSales() {
 // ── 我的房产（炸房提醒） ──
 function homeKey(h) { return `${h.server}:${h.area}:${h.slot}:${h.id}`; }
 
-// 45 天倒计时切成 5 段，每段 9 天：蓝 → 绿 → 青 → 黄 → 红
+// 45 天倒计时切成 5 段，每段 9 天：蓝 → 青 → 绿 → 黄 → 红
+// 已进屋按钮的底色和「剩余 N 天」用同一档，别让同一个数字有两套配色
 const enterStage = d => d > 36 ? 0 : d > 27 ? 1 : d > 18 ? 2 : d > 9 ? 3 : 4;
+const STAGE_COLOR = ['#3B5BA5', '#2d8c9d', '#4C7A34', '#A66A00', '#B03030'];
 
 function renderHomes() {
   const el = $('homeList');
@@ -576,9 +578,8 @@ function renderHomes() {
         status = '<span class="est">进屋时间未知，进屋后打卡</span>';
       } else {
         const d = h.remainDays;
-        const color = d <= 1 ? '#B03030' : d <= 5 ? '#B06030' : d <= 10 ? '#A66A00' : '#4C7A34';
-        const mark = d <= 1 ? '🔴' : d <= 5 ? '🟠' : '🟢';
-        status = `<span style="color:${color};font-weight:bold">${mark} 剩余 ${d} 天</span>` +
+        const color = STAGE_COLOR[enterStage(d)];
+        status = `<span style="color:${color};font-weight:bold">● 剩余 ${d} 天</span>` +
           ` <span class="meta">最后进屋 ${fmtDate(h.lastEnteredAt)}</span>`;
       }
     return `<div class="item" onmouseenter="hoverPlot('${key}')">

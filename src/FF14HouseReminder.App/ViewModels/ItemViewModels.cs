@@ -156,10 +156,11 @@ public partial class HomeViewModel : ObservableObject
         StatusText = days >= 0
             ? $"剩余 {days} 天（最后进屋 {Item.Deadline.AddDays(-45).LocalDateTime:MM-dd}）"
             : "已超过 45 天未进屋！";
-        StatusColor = days <= 1 ? "#B03030" : days <= 5 ? "#B06030" : days <= 10 ? "#A66A00" : "#4C7A34";
-        // 45 天切成 5 段，每段 9 天：蓝 → 绿 → 青 → 黄 → 红
-        EnterColor = days > 36 ? "#3B5BA5" : days > 27 ? "#4C7A34" : days > 18 ? "#2D8C9D"
+        // 45 天切成 5 段，每段 9 天：蓝 → 青 → 绿 → 黄 → 红。
+        // 按钮底色和「剩余 N 天」共用一档，别让同一个数字有两套配色
+        EnterColor = days > 36 ? "#3B5BA5" : days > 27 ? "#2D8C9D" : days > 18 ? "#4C7A34"
                    : days > 9 ? "#A66A00" : "#B03030";
+        StatusColor = EnterColor;
     }
 
     private void NotifyDemolishState()
