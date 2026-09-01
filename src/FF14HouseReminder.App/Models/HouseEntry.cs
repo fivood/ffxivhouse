@@ -46,6 +46,7 @@ public class HouseEntry
     {
         Models.RegionType.FC => "部队",
         Models.RegionType.Personal => "个人",
+        Models.RegionType.Both => "部队/个人",
         _ => "未知"
     };
 

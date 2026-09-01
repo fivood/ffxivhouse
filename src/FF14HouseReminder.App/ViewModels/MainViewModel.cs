@@ -353,7 +353,9 @@ public partial class MainViewModel : ObservableObject
                         || (SizeS && s.Data.EffectiveSize == 0)
                         || (SizeM && s.Data.EffectiveSize == 1)
                         || (SizeL && s.Data.EffectiveSize == 2))
-            .Where(s => RegionFilter < 0 || s.Data.RegionType == RegionFilter);
+            // RegionType 0 = 部队/个人都可买，筛任何一种时都该出现
+            .Where(s => RegionFilter < 0 || s.Data.RegionType == RegionFilter
+                        || s.Data.RegionType == (int)RegionType.Both);
 
         IOrderedEnumerable<HouseSnapshot> ordered = SortIndex switch
         {

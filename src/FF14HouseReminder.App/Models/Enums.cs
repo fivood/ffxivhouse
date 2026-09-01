@@ -13,7 +13,8 @@ public enum PurchaseType
 /// <summary>房屋用途限制</summary>
 public enum RegionType
 {
-    Reserved = 0,
+    /// <summary>部队和个人都可买（官方按小区划分，6.3 起 17-20、28-29 区为此类）</summary>
+    Both = 0,
     /// <summary>仅限部队</summary>
     FC = 1,
     /// <summary>仅限个人</summary>

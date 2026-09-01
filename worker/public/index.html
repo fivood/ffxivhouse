@@ -619,7 +619,9 @@ const URGENCY = t => {
   const span = t - Date.now() / 1000;
   return span <= 3600 ? '#B03030' : span <= 86400 ? '#B06030' : '#3F3F38';
 };
-const REGION = { 1: '部队', 2: '个人' };   // 0 是上游没文档化的值，按未知处理
+// 购买限制按小区定，不是按房子（官方 6.3 起：1-16 个人｜17-20 都行｜21-24 部队｜
+// 25-27 个人｜28-29 都行｜30 部队）。拿 600 套实测过，0 就是「两种都行」
+const REGION = { 0: '部队/个人', 1: '部队', 2: '个人' };
 
 // ── 图标：线条图，跟随按钮字色 ──
 const ICONS = {
@@ -663,7 +665,7 @@ function renderWatch() {
           <button class="icon-btn" onclick="unwatch('${watchKey(w)}')" title="移除关注" aria-label="移除关注">${ico('trash')}</button>
         </span></div>
       <div>${state}${cd}${w.stale ? ` <span class="warn">${ico('warn')} 数据较旧</span>` : ''}</div>
-      <div class="meta">${(w.price || 0).toLocaleString()} 金币 · ${PTYPE[w.purchaseType] || ''} · ${REGION[w.regionType] || '用途未知'}</div>
+      <div class="meta">${(w.price || 0).toLocaleString()} 金币 · ${PTYPE[w.purchaseType] || ''} · ${REGION[w.regionType] ?? '未知'}</div>
     </div>`;
   }).join('');
 }
@@ -709,7 +711,8 @@ function renderSales() {
   let list = sales.filter(h => h.purchaseType === 2 || h.purchaseType === 1)
     .filter(h => area < 0 || h.area === area)
     .filter(h => !sizes.length || sizes.includes(h.size))
-    .filter(h => region < 0 || h.regionType === region);
+    // 0 = 两种都行，筛部队或个人时都该出现
+    .filter(h => region < 0 || h.regionType === region || h.regionType === 0);
 
   const by = {
     1: (a, b) => a.price - b.price,
@@ -730,7 +733,7 @@ function renderSales() {
       <div class="row"><span class="title">${h.areaName} ${h.slotNo}区 ${h.id}号 [${h.size}]</span>
         <button class="watch-btn" ${isW ? 'disabled' : ''} onclick="watch('${key}')">${ico(isW ? 'check' : 'plus')}${isW ? '已关注' : '关注'}</button></div>
       <div><span class="price">${h.price.toLocaleString()} 金币</span>
-        <span class="badge"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] || '用途未知'}${h.state === 1 ? ` · ${h.participate}人参与` : ''}</span></div>
+        <span class="badge"> ${PTYPE[h.purchaseType] || ''} · ${REGION[h.regionType] ?? '未知'}${h.state === 1 ? ` · ${h.participate}人参与` : ''}</span></div>
       <div>${state} <span class="countdown" style="color:${URGENCY(h.phaseEnd)}">${fmtRemain(h.phaseEnd)}</span>
         ${h.stale ? ` <span class="warn">${ico('warn')} 数据较旧</span>` : ''}</div>
     </div>`;
