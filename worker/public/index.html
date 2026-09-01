@@ -192,8 +192,6 @@
   #mapBox .plot.on { fill: rgba(45,140,157,.42); stroke: #14545e; stroke-width: 4; stroke-dasharray: none; }
   #mapBox .plot-no { font-size: 13px; text-anchor: middle; font-weight: bold; pointer-events: none;
                      fill: #3F3F38; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
-  #mapHint { padding: 6px 10px; font-size: 12px; color: var(--dim); line-height: 1.5;
-             border-top: 1px solid var(--bg); }
   .strip.foldable { cursor: pointer; user-select: none; }
   /* Mini App 里已经自动登录，绑定引导没用了 */
   body.in-tg #bindPanel { display: none !important; }
@@ -288,10 +286,6 @@
   </div>
   <div class="panel" id="mapPanel" data-fold="map">
     <div id="mapBox"></div>
-    <div id="mapHint"><span id="mapCount"></span><br>
-      <span style="color:#A66A00">■</span> 可抽　<span style="color:#c9a86a">□</span> 空置未开放　
-      <span style="color:#6b6b60">■</span> 已住人<br>
-      滑过房屋卡片即高亮。上方为北，各小区布局相同。</div>
   </div>
 </div>
 
@@ -998,9 +992,6 @@ function drawMap(hitId) {
         `<text class="plot-no" x="${x}" y="${z + 5}">${no}</text>`;
     }).join('');
 
-    $('mapCount').textContent = known
-      ? `这半个小区 30 块地：可抽 ${freeCount}，空置未开放 ${emptyCount}`
-      : '在售数据加载中…';
     // 扩建区没有单独的图：主城区那张顺时针转 90° 再平移即可
     $('mapBox').innerHTML = `<svg viewBox="${x0} ${z0} ${vw} ${vh}">` +
       `<image x="-512" y="-512" width="1024" height="1024" href="/maps/${area}-0.jpg"` +

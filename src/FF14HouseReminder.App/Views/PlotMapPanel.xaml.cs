@@ -112,7 +112,6 @@ public partial class PlotMapPanel : UserControl
     {
         var ward = HousingMap.Ward(area, half);
         var occ = OnSaleLookup?.Invoke(area, slot);
-        int free = 0, empty = 0;
         // 十张图共用同一个正方形取景框：各房区跨度 201~367、宽高比 0.58~1.73，
         // 各裁各的会让切换房区时缩放忽大忽小（网页端还会顶得下面的列表乱跳）
         var cx = (ward.Min(p => p.X) + ward.Max(p => p.X)) / 2.0;
@@ -146,8 +145,6 @@ public partial class PlotMapPanel : UserControl
 
             var isFree = occ?.Buyable.Contains(no) ?? false;
             var isEmpty = occ?.Empty.Contains(no) ?? false;
-            if (isFree) free++;
-            if (isEmpty) empty++;
             var cell = new Rectangle
             {
                 Width = w * 2,
@@ -180,8 +177,5 @@ public partial class PlotMapPanel : UserControl
             MapCanvas.Children.Add(label);
         }
 
-        CountText.Text = occ == null
-            ? "在售数据加载中…"
-            : $"这半个小区 30 块地：可抽 {free}，空置未开放 {empty}";
     }
 }
