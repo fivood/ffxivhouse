@@ -62,25 +62,25 @@
                 <CheckBox Content="Windows 通知（Toast）" IsChecked="{Binding UseToast}"/>
 
                 <CheckBox Content="Telegram 推送" IsChecked="{Binding TelegramEnabled}"/>
-                <TextBlock Text="Bot Token：" ToolTip="创建方法：&#x0a;1. Telegram 搜索 @BotFather，发送 /newbot&#x0a;2. 按提示输入名称和用户名（以 bot 结尾）&#x0a;3. 把得到的 Token 填到这里"/>
-                <TextBox Text="{Binding TelegramBotToken}" ToolTip="创建方法：&#x0a;1. Telegram 搜索 @BotFather，发送 /newbot&#x0a;2. 按提示输入名称和用户名（以 bot 结尾）&#x0a;3. 把得到的 Token 填到这里"/>
-                <TextBlock Text="Chat ID：" ToolTip="获取方法：&#x0a;1. 先在 Telegram 里给你的 Bot 私聊发一条消息（必须）&#x0a;2. 点右边「获取」按钮，从列表里选你自己&#x0a;（也可以给 @userinfobot 发消息查询）"/>
+                <TextBlock Text="Bot Token：" ToolTip="@BotFather 发 /newbot 建一个，把 Token 填进来"/>
+                <TextBox Text="{Binding TelegramBotToken}" ToolTip="@BotFather 发 /newbot 建一个，把 Token 填进来"/>
+                <TextBlock Text="Chat ID：" ToolTip="先给 Bot 发条消息，再点右边「获取」"/>
                 <DockPanel>
                     <Button Content="获取" Style="{StaticResource Btn}" DockPanel.Dock="Right"
                             Click="FetchChatId_Click"
-                            ToolTip="通过 Bot 的消息记录自动获取 Chat ID&#x0a;（需先给 Bot 发过消息）"/>
-                    <TextBox Text="{Binding TelegramChatId}" ToolTip="获取方法：&#x0a;1. 先在 Telegram 里给你的 Bot 私聊发一条消息（必须）&#x0a;2. 点右边「获取」按钮，从列表里选你自己&#x0a;（也可以给 @userinfobot 发消息查询）"/>
+                            ToolTip="从 Bot 的消息记录里取（需先发过消息）"/>
+                    <TextBox Text="{Binding TelegramChatId}" ToolTip="先给 Bot 发条消息，再点右边「获取」"/>
                 </DockPanel>
 
                 <CheckBox Content="Bark 推送（iOS）" IsChecked="{Binding BarkEnabled}"/>
-                <TextBlock Text="设备 key：" ToolTip="获取方法：&#x0a;1. App Store 装 Bark（iOS）&#x0a;2. 打开 App，复制那串 key 或整条推送地址&#x0a;3. 粘到这里，不用注册账号&#x0a;自建 bark-server 就填带 key 的完整地址，例 https://你的域名/AbCd1234"/>
-                <TextBox Text="{Binding BarkKey}" ToolTip="获取方法：&#x0a;1. App Store 装 Bark（iOS）&#x0a;2. 打开 App，复制那串 key 或整条推送地址&#x0a;3. 粘到这里，不用注册账号&#x0a;自建 bark-server 就填带 key 的完整地址，例 https://你的域名/AbCd1234"/>
+                <TextBlock Text="设备 key：" ToolTip="装 Bark（iOS），把 App 里那串 key 粘进来&#x0a;自建服务器填带 key 的完整地址"/>
+                <TextBox Text="{Binding BarkKey}" ToolTip="装 Bark（iOS），把 App 里那串 key 粘进来&#x0a;自建服务器填带 key 的完整地址"/>
 
                 <CheckBox Content="WxPusher 推送（微信）" IsChecked="{Binding WxPusherEnabled}"/>
-                <TextBlock Text="AppToken：" ToolTip="获取方法：&#x0a;1. 浏览器打开 wxpusher.zjiecode.com，微信扫码登录&#x0a;2. 应用管理 → 创建应用&#x0a;3. 复制 appToken（AT_ 开头）填到这里"/>
-                <TextBox Text="{Binding WxPusherAppToken}" ToolTip="获取方法：&#x0a;1. 浏览器打开 wxpusher.zjiecode.com，微信扫码登录&#x0a;2. 应用管理 → 创建应用&#x0a;3. 复制 appToken（AT_ 开头）填到这里"/>
-                <TextBlock Text="UID：" ToolTip="获取方法：&#x0a;1. 在应用详情页用微信扫码订阅&#x0a;2. 用户管理里找到自己的 UID（UID_ 开头）填到这里"/>
-                <TextBox Text="{Binding WxPusherUid}" ToolTip="获取方法：&#x0a;1. 在应用详情页用微信扫码订阅&#x0a;2. 用户管理里找到自己的 UID（UID_ 开头）填到这里"/>
+                <TextBlock Text="AppToken：" ToolTip="wxpusher.zjiecode.com 扫码登录 → 创建应用 → 复制 AT_ 开头的 appToken"/>
+                <TextBox Text="{Binding WxPusherAppToken}" ToolTip="wxpusher.zjiecode.com 扫码登录 → 创建应用 → 复制 AT_ 开头的 appToken"/>
+                <TextBlock Text="UID：" ToolTip="应用详情页扫码订阅后，用户管理里找 UID_ 开头那串"/>
+                <TextBox Text="{Binding WxPusherUid}" ToolTip="应用详情页扫码订阅后，用户管理里找 UID_ 开头那串"/>
 
                 <StackPanel Orientation="Horizontal">
                     <Button Content="发送测试推送" Style="{StaticResource Btn}" Click="TestPush_Click"/>

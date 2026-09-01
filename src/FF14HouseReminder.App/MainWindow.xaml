@@ -299,7 +299,7 @@
                                     <WrapPanel Margin="0,6,0,0">
                                         <Button Content="✔ 已进屋" Margin="0,0,4,0"
                                                 Visibility="{Binding NotDemolished, Converter={StaticResource BoolToVis}}"
-                                                ToolTip="刚进过屋，打卡重置倒计时"
+                                                ToolTip="打卡，重置倒计时"
                                                 Command="{Binding DataContext.EnterHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}">
@@ -319,7 +319,7 @@
                                         <DatePicker SelectedDate="{Binding BackfillDate}" Width="105" Margin="0,0,4,0"
                                                     DisplayDateEnd="{Binding DataContext.Today,
                                                         RelativeSource={RelativeSource AncestorType=ListBox}}"
-                                                    ToolTip="日期：补签进屋日 / 标记炸房日都用它，留空按今天算"/>
+                                                    ToolTip="补签或炸房日期，留空按今天"/>
                                         <Button Content="🗓" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
                                                 Visibility="{Binding NotDemolished, Converter={StaticResource BoolToVis}}"
                                                 ToolTip="按所选日期补签"
@@ -328,7 +328,7 @@
                                                 CommandParameter="{Binding}"/>
                                         <Button Content="📅" Style="{StaticResource RetroBtn}" Margin="0,0,4,0"
                                                 Visibility="{Binding Demolished, Converter={StaticResource BoolToVis}}"
-                                                ToolTip="按所选日期更正炸房日"
+                                                ToolTip="改炸房日"
                                                 Command="{Binding DataContext.SetDemolishDateCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
@@ -439,7 +439,7 @@
                         <ComboBoxItem Content="部队"/>
                         <ComboBoxItem Content="个人"/>
                     </ComboBox>
-                    <Button Content="🗺 房区图" ToolTip="打开房区图，滑过房屋条目会高亮对应地块"
+                    <Button Content="🗺 房区图" ToolTip="房区图：滑过房屋条目高亮对应地块"
                             Command="{Binding ToggleMapCommand}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource RetroBtn}">

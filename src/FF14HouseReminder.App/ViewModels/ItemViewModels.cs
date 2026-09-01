@@ -120,8 +120,8 @@ public partial class HomeViewModel : ObservableObject
     // 操作行要挤进一行，次要按钮只留图标，说明交给 ToolTip
     public string DemolishText => Item.DemolishedAt > 0 ? "↺" : "💥";
     public string DemolishTip => Item.DemolishedAt > 0
-        ? "房子还在？取消炸房标记"
-        : "房子被拆了？开始 35 天资产回收倒计时（家具庭具 + 购地金币 80%）；选了日期就按那天起算";
+        ? "取消炸房标记"
+        : "标记炸房，开始 35 天资产回收倒计时";
     /// <summary>打过卡（已进屋按钮上色）</summary>
     public bool HasEntered => Item.DemolishedAt <= 0 && Item.LastEnteredAt > 0;
     /// <summary>没炸房时才显示打卡/补签</summary>

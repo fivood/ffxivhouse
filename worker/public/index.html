@@ -222,11 +222,11 @@
 <div class="row">
   <h1><img src="/icon-64.png" width="32" height="32" style="vertical-align:-8px;margin-right:10px">抽房了吗<span id="nickBadge" class="meta" style="margin-left:10px"></span></h1>
   <button class="icon-btn plain" id="openInBrowser" onclick="openInBrowser()"
-          title="用系统浏览器打开（带上登录信息）" aria-label="用浏览器打开" style="display:none">
+          title="用浏览器打开" aria-label="用浏览器打开" style="display:none">
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
   </button>
-  <button class="icon-btn plain" onclick="refreshAll()" title="重新拉取数据" aria-label="刷新">
+  <button class="icon-btn plain" onclick="refreshAll()" title="刷新" aria-label="刷新">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><polyline points="21 3 21 9 15 9"/></svg>
   </button>
@@ -243,7 +243,7 @@
 
 <!-- 房区图（常显） -->
 <div id="mapSection">
-  <div class="strip foldable" onclick="toggleFold('map')" title="点标题条收起 / 展开">
+  <div class="strip foldable" onclick="toggleFold('map')" title="收起 / 展开">
     <span>⊙ 房区图 <button class="fold" id="mapArrow">▾</button></span>
     <span id="mapCtl" data-fold="map" onclick="event.stopPropagation()">
       <select id="mapArea" onchange="drawMap()">
@@ -258,7 +258,7 @@
   </div>
   <div class="panel" id="mapPanel" data-fold="map">
     <div id="mapBox"></div>
-    <div id="mapHint">滑过（手机上点）房屋卡片或图上地块即高亮，也可直接用上面两个下拉翻。上方为北，同一房区各小区布局相同。</div>
+    <div id="mapHint">滑过（手机上点）房屋卡片即高亮对应地块。上方为北，各小区布局相同。</div>
   </div>
 </div>
 
@@ -266,10 +266,8 @@
 <div id="bindPanel" style="display:none">
   <div class="strip">⊙ 绑定 Telegram 提醒</div>
   <div class="panel bind-box">
-    本页用于管理你的房屋关注列表，提醒通过 Telegram Bot 推送。<br><br>
-    ① 在 Telegram 打开 <b>@fivood_house_bot</b>，发送 <b>/start</b><br>
-    ② 点 Bot 回复里的专属链接即可自动绑定<br><br>
-    <span class="meta">或手动填写：链接里 u= 后面是用户 ID，k= 后面是令牌</span>
+    在 Telegram 打开 <b>@fivood_house_bot</b> 发 <b>/start</b>，点回复里的链接即可绑定。<br>
+    <span class="meta">也可手动填：链接里 u= 和 k= 后面那两串</span>
     <input type="text" id="bindU" placeholder="用户 ID（u=）">
     <input type="text" id="bindK" placeholder="令牌（k=）">
     <button class="primary" onclick="bindManual()">绑定</button>
@@ -278,20 +276,20 @@
 
 <!-- 我的关注（吸顶，需直接挂在 body 下才能整页吸附） -->
 <div id="watchSticky" class="sticky-top" style="display:none">
-  <div class="strip foldable" onclick="toggleFold('watch')" title="点标题条收起 / 展开">
+  <div class="strip foldable" onclick="toggleFold('watch')" title="收起 / 展开">
     <span>⊙ 我的关注 <button class="fold" id="watchArrow">▾</button></span></div>
   <div class="panel" id="watchList" data-fold="watch"><div class="empty">加载中…</div></div>
 </div>
 
 <!-- 我的房产（炸房提醒） -->
 <div id="homeSection" style="display:none">
-  <div class="strip foldable" onclick="toggleFold('home')" title="点标题条收起 / 展开">
+  <div class="strip foldable" onclick="toggleFold('home')" title="收起 / 展开">
     <span>⊙ 我的房产 <button class="fold" id="homeArrow">▾</button>
       <span class="meta" style="font-weight:normal">30 天进入拆除准备，45 天拆除</span></span></div>
   <div class="panel" data-fold="home">
     <div id="homeList"><div class="empty">暂无登记</div></div>
     <div class="bind-box" style="border-top:1px solid var(--bg)">
-      <span class="meta">登记我的房（多账号可登记多套，角色名做备注）：</span>
+      <span class="meta">登记我的房（可登记多套，角色名做备注）：</span>
       <div class="reg-form">
         <select id="homeServer"></select>
         <select id="homeArea">
@@ -318,19 +316,18 @@
     <div class="chips" id="notifyChips"></div>
     截止前提醒（点选时间片，即时生效）：
     <div class="chips" id="leadChips"></div>
-    <span class="meta">可多选；微信渠道有频率限制（约 20 条/天），建议不超过 3 个</span>
+    <span class="meta">最多 3 个（微信渠道有频率限制）</span>
     <br>
-    <span class="meta">推送顺序：Telegram → Bark → 微信，开哪个收哪个。</span>
+    <span class="meta">推送顺序：Telegram → Bark → 微信</span>
     <button class="wx-toggle" id="barkToggle" onclick="toggleBark()">
       <span id="barkArrow">▸</span> Bark 推送（可选，iOS）<span id="barkMiniStatus" style="color:var(--green)"></span>
     </button>
     <div id="barkSection" style="display:none">
-      <span class="meta">iOS 上最省事的一条通道：装 <a href="https://apps.apple.com/app/bark-customed-notifications/id1403753865" target="_blank">Bark</a>，
-      打开 App 复制那串 key（或整条推送地址）粘进来即可，不用注册账号。<br>
-      自建了 bark-server 就填<b>带 key 的完整地址</b>，例 <code>https://你的域名/AbCd1234</code>（只填域名会推不出去）。</span>
+      <span class="meta">装 <a href="https://apps.apple.com/app/bark-customed-notifications/id1403753865" target="_blank">Bark</a>，把 App 里那串 key 粘进来，不用注册。<br>
+      自建服务器填带 key 的完整地址，例 <code>https://你的域名/AbCd1234</code>。</span>
       <div class="row" style="margin-top:6px">
         <input type="text" id="barkInput" placeholder="设备 key，或自建的 https://域名/key，留空则关闭" style="flex:1">
-        <button onclick="saveBark()" class="icon-btn" title="保存 Bark 推送设置">
+        <button onclick="saveBark()" class="icon-btn" title="保存">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         </button>
       </div>
@@ -340,9 +337,9 @@
       <span id="wxArrow">▸</span> 微信推送（可选，走 WxPusher APP）<span id="wxMiniStatus" style="color:var(--green)"></span>
     </button>
     <div id="wxSection" style="display:none">
-      <span class="meta">除 Telegram 外，同时推送到手机。因微信官方收紧公众号通道，消息由 <b>WxPusher APP</b> 接收（支持苹果/小米/华为/vivo/荣耀系统级推送）。<br>
-      ① 微信扫二维码关注 WxPusher 公众号 → ② 按提示获得 SPT_ 开头的令牌 → ③ 粘贴到下方 → ④ 安装 <a href="https://wxpusher.zjiecode.com/download/" target="_blank">WxPusher APP</a> 并登录同一微信即可收到推送</span>
-      <button onclick="toggleQr()" id="qrBtn" class="icon-btn" title="显示/收起二维码" style="margin:2px 0">
+      <span class="meta">扫码关注 WxPusher 公众号拿 SPT_ 令牌，粘到下方，再装
+      <a href="https://wxpusher.zjiecode.com/download/" target="_blank">WxPusher APP</a> 登录同一微信即可。</span>
+      <button onclick="toggleQr()" id="qrBtn" class="icon-btn" title="二维码" style="margin:2px 0">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14h1v1h-1zM14 20h1v1h-1zM17 17h4v4h-4z" fill="currentColor" stroke="none"/></svg>
         二维码
       </button>
@@ -352,7 +349,7 @@
       </div>
       <div class="row">
         <input type="text" id="wxUidInput" placeholder="SPT_ 开头，留空则关闭微信推送" style="flex:1">
-        <button onclick="saveWxUid()" class="icon-btn" title="保存微信推送设置">
+        <button onclick="saveWxUid()" class="icon-btn" title="保存">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
         </button>
       </div>
@@ -670,18 +667,18 @@ function renderHomes() {
           ` <span class="meta">最后进屋 ${fmtDate(h.lastEnteredAt)}</span>`;
       }
     const enterBtn = h.demolishedAt > 0 ? '' :
-      `<button class="icon-btn btn-enter ${h.lastEnteredAt > 0 ? 'lit d' + enterStage(h.remainDays) : ''}" title="刚进过屋，打卡重置倒计时" onclick="enteredHome('${key}')">${ico('check')}已进屋</button>`;
+      `<button class="icon-btn btn-enter ${h.lastEnteredAt > 0 ? 'lit d' + enterStage(h.remainDays) : ''}" title="打卡，重置倒计时" onclick="enteredHome('${key}')">${ico('check')}已进屋</button>`;
     return `<div class="item" onmouseenter="hoverPlot('${key}')">
       <div class="row"><span class="title">${h.serverName} ${h.areaName} ${h.slotNo}区 ${h.id}号 <span class="meta">${h.label}</span></span>${enterBtn}</div>
       <div>${status}</div>
       <div class="home-actions">
         ${h.demolishedAt > 0
           ? `<input type="date" id="dd-${key}" max="${todayStr()}" title="房子被拆的那天">
-        <button class="icon-btn" title="按所选日期更正炸房日" aria-label="改炸房日" onclick="setDemolishDate('${key}')">${ico('calendar')}<span class="lbl">改炸房日</span></button>
-        <button class="icon-btn" title="房子还在？取消炸房标记" aria-label="取消炸房" onclick="demolishHome('${key}')">${ico('undo')}<span class="lbl">取消炸房</span></button>`
-          : `<input type="date" id="bd-${key}" max="${todayStr()}" title="日期：补签进屋日 / 标记炸房日都用它，留空按今天算">
-        <button class="icon-btn" title="按所选日期补签进屋" aria-label="补签" onclick="backfillHome('${key}')">${ico('calendar')}<span class="lbl">补签</span></button>
-        <button class="icon-btn btn-danger" title="房子被拆了？开始 35 天资产回收倒计时（家具庭具 + 购地金币 80%）；选了日期就按那天起算" aria-label="我房炸了" onclick="demolishHome('${key}')">${ico('zap')}<span class="lbl">我房炸了</span></button>`}
+        <button class="icon-btn" title="改炸房日" aria-label="改炸房日" onclick="setDemolishDate('${key}')">${ico('calendar')}<span class="lbl">改炸房日</span></button>
+        <button class="icon-btn" title="取消炸房标记" aria-label="取消炸房" onclick="demolishHome('${key}')">${ico('undo')}<span class="lbl">取消炸房</span></button>`
+          : `<input type="date" id="bd-${key}" max="${todayStr()}" title="补签或炸房日期，留空按今天">
+        <button class="icon-btn" title="按所选日期补签" aria-label="补签" onclick="backfillHome('${key}')">${ico('calendar')}<span class="lbl">补签</span></button>
+        <button class="icon-btn btn-danger" title="标记炸房，开始 35 天资产回收倒计时" aria-label="我房炸了" onclick="demolishHome('${key}')">${ico('zap')}<span class="lbl">我房炸了</span></button>`}
         <button class="icon-btn" title="移除这套房产" aria-label="移除这套房产" onclick="removeHome('${key}')">${ico('trash')}</button>
       </div>
     </div>`;
