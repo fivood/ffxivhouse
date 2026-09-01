@@ -8,8 +8,8 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>FF14HouseReminder</AssemblyName>
     <RootNamespace>FF14HouseReminder</RootNamespace>
-    <Version>0.8.0</Version>
-    <AssemblyInformationalVersion>0.8.0</AssemblyInformationalVersion>
+    <Version>0.8.1</Version>
+    <AssemblyInformationalVersion>0.8.1</AssemblyInformationalVersion>
     <Description>抽房了吗 - FF14 房屋抽签时间提醒</Description>
     <Product>抽房了吗</Product>
     <ApplicationIcon>Resources\house.ico</ApplicationIcon>
