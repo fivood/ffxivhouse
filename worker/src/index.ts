@@ -465,7 +465,8 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 
 拉我进群 = 群内炸房监控：群友各自 /myhome 登记，
 到点我在群里点名，谁看到谁顺手提醒本人一声。
-群里只能改自己登记的那套；/panel 和 /link 只在私聊有效。
+群里只有 /myhome /entered /demolished /homes 四条；
+抽房关注和推送设置是个人的，只在私聊有效。
 不想让群里看到具体房号：私聊发 /public off，群里就只写
 「你 的房（备注）还剩 N 天」，提醒照发。
 
@@ -542,9 +543,19 @@ async function handleCommand(
   env: Env, chatId: number, text: string, sender?: TgUser, isGroup = false,
 ): Promise<void> {
   const parts = text.trim().split(/[\s，,、]+/).filter(Boolean);
-  const cmd = (parts[0] ?? '').toLowerCase().replace(/@\w+$/, '');
+  const raw = (parts[0] ?? '').toLowerCase();
+  // 群里可能还有别的 Bot，命令带 @xxx 后缀才是明确点名给谁的
+  const addressed = /@\w+$/.test(raw);
+  const cmd = raw.replace(/@\w+$/, '');
   const args = parts.slice(1);
   const nowSec = Math.floor(Date.now() / 1000);
+
+  // 群里只做炸房监控。抽房是个人的事：报名与否、提前量、推送渠道都因人而异，
+  // 发一整群人既吵又没意义
+  if (isGroup && ['/watch', '/list', '/mode', '/unwatch', '/lead', '/notify', '/bark', '/name'].includes(cmd)) {
+    await tgSend(env, chatId, `群里只做炸房监控，${cmd} 是个人设置，私聊我发一次就行。`);
+    return;
+  }
 
   switch (cmd) {
     case '/start': {
@@ -557,7 +568,8 @@ async function handleCommand(
           + `\n　例：/myhome 萌芽池 白银乡 14 43 阿光`
           + `\n进屋后发 /entered 打卡，/homes 看全群的倒计时。`
           + `\n快拆时我会在群里点名，看到的人顺手提醒本人一声。`
-          + `\n\n想要自己的私人提醒（抽房、推送设置），私聊我发 /start。`);
+          + `\n不想让群里看到房号：私聊我发 /public off。`
+          + `\n\n群里只做炸房监控。抽房关注和推送设置是个人的，私聊我发 /start。`);
         return;
       }
       // 只说一句 + 面板按钮，命令表交给 /help，别一上来糊一屏
@@ -998,6 +1010,9 @@ ${r.msg}`);
     }
 
     default:
+      // 群里别的 Bot 的命令也会被 Telegram 送过来（隐私模式只过滤非 / 开头的消息）。
+      // 不是明确点名给我的就闭嘴，否则群里每有人用别的 Bot 我就刷一条「未知命令」
+      if (isGroup && !addressed) return;
       await tgSend(env, chatId, '未知命令，发 /help 查看用法。');
   }
 }
@@ -1131,7 +1146,8 @@ async function runReminders(env: Env): Promise<void> {
 
     const notify = sub.notify ?? NOTIFY_ALL;
 
-    for (const w of sub.items) {
+    // 群订阅（Telegram 的群 chat id 是负数）只跑房产那段，抽房不发到群里
+    for (const w of sub.chatId < 0 ? [] : sub.items) {
       const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
       const pos = `${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?'}]`;
 
