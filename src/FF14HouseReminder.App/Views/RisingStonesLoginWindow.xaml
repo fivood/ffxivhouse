@@ -1,0 +1,15 @@
+<Window x:Class="FF14HouseReminder.Views.RisingStonesLoginWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="登录石之家" Height="720" Width="1000"
+        WindowStartupLocation="CenterOwner" Background="#D8D8CF"
+        FontFamily="Tahoma, Microsoft YaHei UI" FontSize="12">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="#D8D8CF" Padding="10,7">
+            <TextBlock x:Name="Hint" Foreground="#55554A" TextWrapping="Wrap"
+                       Text="在下面点「登录」用叨鱼扫码。登录成功后本窗口会自动关闭，只把会话凭据存在本机。"/>
+        </Border>
+        <wv2:WebView2 x:Name="Web"/>
+    </DockPanel>
+</Window>

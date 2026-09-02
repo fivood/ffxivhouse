@@ -47,6 +47,7 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
 
         CloudLink = App.Cloud.Linked ? $"u={g.CloudUser}&k={g.CloudToken}" : "";
         ShowCloudStatus();
+        ShowRsStatus();
 
         LocalIngestEnabled = g.LocalIngestEnabled;
         IngestAddress = $"http://127.0.0.1:{g.LocalIngestPort}/api/ingest";
@@ -102,6 +103,53 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
     private void Notify(params string[] names)
     {
         foreach (var n in names) PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+    }
+
+    // ── 石之家 ──
+    private void ShowRsStatus()
+    {
+        var list = _config.Config.General.RisingStones;
+        RsStatus.Text = list.Count == 0
+            ? "未登录：炸房倒计时仍靠手动打卡"
+            : string.Join("；", list.Select(a =>
+                (a.Nickname.Length > 0 ? a.Nickname : "账号")
+                + (a.LastOkAt is { } t ? $" 上次读取 {t.LocalDateTime:MM-dd HH:mm}" : " 尚未读取")
+                + (a.ExpiresAt is { } e
+                    ? e > DateTimeOffset.Now ? $"，登录 {e.LocalDateTime:MM-dd HH:mm} 过期" : "，登录已过期"
+                    : "")));
+    }
+
+    private void RsLogin_Click(object sender, RoutedEventArgs e)
+    {
+        var win = new RisingStonesLoginWindow { Owner = Window.GetWindow(this) };
+        if (win.ShowDialog() != true || win.Result == null)
+        {
+            RsStatus.Text = "没拿到登录状态，窗口里登录完再关";
+            return;
+        }
+        // 同一个角色重复登录就换掉旧凭据，别越攒越多
+        var list = _config.Config.General.RisingStones;
+        list.RemoveAll(a => a.Nickname == win.Result.Nickname);
+        list.Add(win.Result);
+        _config.Save();
+        ShowRsStatus();
+        RsFetch_Click(sender, e);
+    }
+
+    private async void RsFetch_Click(object sender, RoutedEventArgs e)
+    {
+        if (_config.Config.General.RisingStones.Count == 0) { RsStatus.Text = "先登录一个石之家账号"; return; }
+        RsStatus.Text = "读取中…";
+        var lines = await RisingStonesSync.RefreshAsync(_config, App.Cloud, App.Push);
+        RsStatus.Text = lines.Count > 0 ? string.Join("；", lines) : "没读到任何角色";
+        App.Reminders.Recompute();
+    }
+
+    private void RsClear_Click(object sender, RoutedEventArgs e)
+    {
+        _config.Config.General.RisingStones.Clear();
+        _config.Save();
+        ShowRsStatus();
     }
 
     private void ShowCloudStatus()

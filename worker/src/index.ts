@@ -91,6 +91,10 @@ interface WatchItem {
 /** 我的房产（炸房提醒）：手动登记 + 进房打卡 */
 interface HomeEntry {
   server: number; area: number; slot: number; id: number;
+  /** 群里登记时记下是谁的房，提醒发到群里才能点名（私聊登记的没有） */
+  ownerId?: number;
+  /** 群里显示用的称呼，有 username 就存 @xxx，能顺带 @ 到人 */
+  ownerName?: string;
   /** 备注（一般是角色名，多账号区分用） */
   label: string;
   /** 最后一次进房时间（unix 秒），0=未知 */
@@ -139,6 +143,12 @@ interface UserSub {
   items: WatchItem[];
   /** 我的房产（炸房提醒） */
   homes?: HomeEntry[];
+  /**
+   * 群里是否公开自己房子的具体位置。未设置＝公开。
+   * 关掉之后群里只剩「@某某 的房（备注）还剩 N 天」，房号服务器都不显示——
+   * 提醒到人这个核心不受影响，只是不把地块摊给整个群。
+   */
+  groupPublic?: boolean;
   /** 可选：Bark 设备 key，或自建服务器的完整地址（iOS 渠道） */
   barkKey?: string;
   /** 可选：WxPusher 极简推送 SPT（微信渠道） */
@@ -451,7 +461,13 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /demolished [序号] — 标记已拆除（35 天资产回收倒计时）
 /homes — 我的房产
 
-其他：/name 昵称 · /bark key · /servers · /link · /help
+其他：/name 昵称 · /bark key · /public on|off · /servers · /link · /help
+
+拉我进群 = 群内炸房监控：群友各自 /myhome 登记，
+到点我在群里点名，谁看到谁顺手提醒本人一声。
+群里只能改自己登记的那套；/panel 和 /link 只在私聊有效。
+不想让群里看到具体房号：私聊发 /public off，群里就只写
+「你 的房（备注）还剩 N 天」，提醒照发。
 
 数据来源：house.ffxiv.cyou（玩家上报，可能延迟）`;
 
@@ -472,7 +488,9 @@ function fmtRemain(nowSec: number, targetSec: number): string {
 }
 
 /** 处理内联按钮回调（entered:server:area:slot:id → 炸房打卡） */
-async function handleCallback(env: Env, chatId: number, callbackId: string, data: string): Promise<void> {
+async function handleCallback(
+  env: Env, chatId: number, callbackId: string, data: string, from?: TgUser, isGroup = false,
+): Promise<void> {
   const parts = data.split(':');
   if (parts[0] === 'entered' && parts.length === 5) {
     const server = parseInt(parts[1], 10);
@@ -486,6 +504,11 @@ async function handleCallback(env: Env, chatId: number, callbackId: string, data
       await tgAnswerCallback(env, callbackId, '未找到该房产（可能已移除）');
       return;
     }
+    // 群里谁都能点这个按钮，但只有房主自己知道进没进屋，替别人点等于把倒计时清错
+    if (isGroup && home.ownerId && home.ownerId !== from?.id) {
+      await tgAnswerCallback(env, callbackId, `这是 ${home.ownerName ?? '别人'} 的房，只能由本人打卡`);
+      return;
+    }
     home.lastEnteredAt = Math.floor(Date.now() / 1000);
     home.fired = [];
     await saveSub(env, sub);
@@ -495,7 +518,29 @@ async function handleCallback(env: Env, chatId: number, callbackId: string, data
   await tgAnswerCallback(env, callbackId, '未知操作');
 }
 
-async function handleCommand(env: Env, chatId: number, text: string): Promise<void> {
+/**
+ * 群里这条房产该怎么写：房主关了公开就只写称呼和备注，不带服务器房区房号。
+ * 设置存在房主自己的私聊订阅里（sub:{他的 id}），所以要按 ownerId 去查一下。
+ */
+async function groupPos(env: Env, h: HomeEntry, full: string, cache: Map<number, boolean>): Promise<string> {
+  if (!h.ownerId) return full;                       // 私聊登记的，没有群这回事
+  let open = cache.get(h.ownerId);
+  if (open === undefined) {
+    const owner = await getSub(env, h.ownerId);
+    open = owner.groupPublic !== false;
+    cache.set(h.ownerId, open);
+  }
+  return open ? `${h.ownerName} 的 ${full}` : `${h.ownerName} 的房（${h.label}）`;
+}
+
+/** 群里显示用的称呼：有 username 就用 @xxx（顺带能 @ 到人），否则用名字 */
+function whoIs(user?: TgUser): string {
+  return user?.username ? `@${user.username}` : (user?.first_name ?? '某位群友');
+}
+
+async function handleCommand(
+  env: Env, chatId: number, text: string, sender?: TgUser, isGroup = false,
+): Promise<void> {
   const parts = text.trim().split(/[\s，,、]+/).filter(Boolean);
   const cmd = (parts[0] ?? '').toLowerCase().replace(/@\w+$/, '');
   const args = parts.slice(1);
@@ -503,6 +548,18 @@ async function handleCommand(env: Env, chatId: number, text: string): Promise<vo
 
   switch (cmd) {
     case '/start': {
+      // 群里不能挂 Mini App 按钮（Telegram 只允许私聊），而且群是共用一份列表，
+      // 定位就是炸房监控：谁登记谁的房，到点在群里点名，方便别人线下捅一下本人
+      if (isGroup) {
+        await tgSend(env, chatId,
+          '🏠 抽房了吗 — 群内炸房监控'
+          + `\n\n各自登记自己的房：/myhome 服务器 房区 区号 房号 [角色名]`
+          + `\n　例：/myhome 萌芽池 白银乡 14 43 阿光`
+          + `\n进屋后发 /entered 打卡，/homes 看全群的倒计时。`
+          + `\n快拆时我会在群里点名，看到的人顺手提醒本人一声。`
+          + `\n\n想要自己的私人提醒（抽房、推送设置），私聊我发 /start。`);
+        return;
+      }
       // 只说一句 + 面板按钮，命令表交给 /help，别一上来糊一屏
       await tgSendWebApp(env, chatId,
         '🏠 抽房了吗 — FF14 房屋抽签提醒'
@@ -552,6 +609,10 @@ ${r.msg}`);
     }
 
     case '/link': {
+      if (isGroup) {
+        await tgSend(env, chatId, '这里不发登录令牌——群里人人可见等于把这份列表交出去。私聊我发 /link。');
+        return;
+      }
       const token = await bindToken(env, chatId);
       // <code> 在 Telegram 里点一下就复制，省得从长链接里抠 u/k
       await tgSend(env, chatId,
@@ -566,6 +627,10 @@ ${r.msg}`);
     }
 
     case '/panel': {
+      if (isGroup) {
+        await tgSend(env, chatId, '面板是私人的，私聊我发 /panel 打开。群里用 /myhome、/entered、/homes 就够了。');
+        return;
+      }
       await tgSendWebApp(env, chatId,
         '🌐 面板：在这里管关注、我的房产、提醒开关，还能看房区图。'
         + `\n点下面的按钮直接打开，免绑定。`,
@@ -576,6 +641,29 @@ ${r.msg}`);
     case '/help':
       await tgSend(env, chatId, HELP_TEXT);
       return;
+
+    case '/public': {
+      if (isGroup) {
+        await tgSend(env, chatId, '这个设置是你个人的，私聊我发 /public 改。');
+        return;
+      }
+      const me = await getSub(env, chatId);
+      const arg = (args[0] ?? '').toLowerCase();
+      if (arg !== 'on' && arg !== 'off') {
+        await tgSend(env, chatId,
+          `群内公开房屋位置：${me.groupPublic === false ? '关（只显示称呼和备注）' : '开（显示服务器和房号）'}`
+          + `\n/public off 关掉之后，群里只会写「你 的房（备注）还剩 N 天」，`
+          + `\n提醒照发、别人照样知道该提醒你，只是不把地块摊给整个群。`
+          + `\n/public on 改回公开。`);
+        return;
+      }
+      me.groupPublic = arg === 'on';
+      await saveSub(env, me);
+      await tgSend(env, chatId, me.groupPublic
+        ? '已改为公开：群里会写出你房子的服务器和房号。'
+        : '已关闭公开：群里只写「你 的房（备注）还剩 N 天」，不带位置。');
+      return;
+    }
 
     case '/servers': {
       const text = DATA_CENTERS
@@ -763,6 +851,10 @@ ${r.msg}`);
       sub.homes ??= [];
       const existing = sub.homes.find(h => h.server === server.id && h.area === area && h.slot === slot - 1 && h.id === plotId);
       if (existing) {
+        if (isGroup && existing.ownerId && existing.ownerId !== sender?.id) {
+          await tgSend(env, chatId, `这套房是 ${existing.ownerName ?? '别人'} 登记的，换个房号吧。`);
+          return;
+        }
         if (label) existing.label = label;
         await saveSub(env, sub);
         await tgSend(env, chatId, `这套房已登记过${label ? '，备注已更新' : ''}。`);
@@ -774,10 +866,12 @@ ${r.msg}`);
         label: label || '我的房',
         lastEnteredAt: nowSec, // 默认以登记时间为起点
         fired: [],
+        ...(isGroup ? { ownerId: sender?.id, ownerName: whoIs(sender) } : {}),
       });
       await saveSub(env, sub);
       await tgSend(env, chatId,
-        `🏠 已登记：${server.name} ${AREA_NAMES[area]} ${slot}区 ${plotId}号（${label || '我的房'}）\n` +
+        `🏠 已登记：${server.name} ${AREA_NAMES[area]} ${slot}区 ${plotId}号（${label || '我的房'}）`
+        + (isGroup ? `，房主 ${whoIs(sender)}` : '') + `\n` +
         `倒计时 ${DEMOLITION_DAYS} 天起算。最近没进过屋的话，进屋后发 /entered 校准。`);
       return;
     }
@@ -821,6 +915,10 @@ ${r.msg}`);
         await tgSend(env, chatId, `序号超出范围（1-${homes.length}）。`);
         return;
       }
+      if (isGroup && homes[idx].ownerId && homes[idx].ownerId !== sender?.id) {
+        await tgSend(env, chatId, `第 ${idx + 1} 项是 ${homes[idx].ownerName ?? '别人'} 的房，只能本人打卡。`);
+        return;
+      }
 
       homes[idx].lastEnteredAt = dateSec > 0 ? dateSec : nowSec;
       homes[idx].fired = [];
@@ -852,6 +950,10 @@ ${r.msg}`);
         return;
       }
       const h = homes[idx];
+      if (isGroup && h.ownerId && h.ownerId !== sender?.id) {
+        await tgSend(env, chatId, `第 ${idx + 1} 项是 ${h.ownerName ?? '别人'} 的房，只能本人标记。`);
+        return;
+      }
       if (h.demolishedAt && h.demolishedAt > 0) {
         h.demolishedAt = 0;
         await saveSub(env, sub);
@@ -874,9 +976,11 @@ ${r.msg}`);
         return;
       }
       const nowSec = Math.floor(Date.now() / 1000);
-      const lines = homes.map((h, i) => {
+      const cache = new Map<number, boolean>();
+      const lines = await Promise.all(homes.map(async (h, i) => {
         const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
-        const pos = `${i + 1}. ${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
+        const full = `${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
+        const pos = `${i + 1}. ` + (isGroup ? await groupPos(env, h, full, cache) : full);
         if (h.demolishedAt && h.demolishedAt > 0) {
           const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
           const days = Math.floor((fDeadline - nowSec) / 86400);
@@ -888,7 +992,7 @@ ${r.msg}`);
         const days = Math.floor(remain / 86400);
         const mark = days <= 5 ? '🔴' : days <= 10 ? '🟠' : '🟢';
         return `${pos}\n　${mark} 剩余 ${days} 天（最后进屋 ${fmtTime(h.lastEnteredAt)}）`;
-      });
+      }));
       await tgSend(env, chatId, lines.join('\n'));
       return;
     }
@@ -908,6 +1012,8 @@ interface DueReminder {
 
 async function runReminders(env: Env): Promise<void> {
   const nowSec = Math.floor(Date.now() / 1000);
+  // 房主的「群内是否公开」设置存在他自己的订阅里，一轮跑下来只查一次
+  const publicCache = new Map<number, boolean>();
   const subKeys = await env.KV.list({ prefix: 'sub:' });
   if (subKeys.keys.length === 0) return;
 
@@ -939,7 +1045,9 @@ async function runReminders(env: Env): Promise<void> {
     // ── 炸房提醒（45 天未进房 / 拆除后资产回收 35 天）──
     for (const h of sub.homes ?? []) {
       const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
-      const pos = `${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
+      // 群登记的房带上房主：提醒发到群里，别人得知道这条说的是谁
+      const pos = await groupPos(env, h,
+        `${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`, publicCache);
 
       // 已炸房：资产回收 35 天死线
       if (h.demolishedAt && h.demolishedAt > 0) {
@@ -1248,6 +1356,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json({
       leadHours: sub.leadHours,
       notify: sub.notify ?? NOTIFY_ALL,
+      groupPublic: sub.groupPublic !== false,
       barkKey: sub.barkKey ?? '',
       wxpusherSpt: sub.wxpusherSpt ?? '',
       nickname: sub.nickname ?? '',
@@ -1411,6 +1520,17 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json({ ok: true, notify: next });
   }
 
+  // 群内是否公开自己房子的位置（个人设置，影响 Bot 在群里怎么写你的房）
+  if (path === '/api/grouppublic' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; open?: boolean };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const sub = await getSub(env, chatId);
+    sub.groupPublic = body.open !== false;
+    await saveSub(env, sub);
+    return json({ ok: true, groupPublic: sub.groupPublic });
+  }
+
   if (path === '/api/lead' && request.method === 'POST') {
     const body = (await request.json()) as { u?: number; k?: string; hours?: number[] };
     const chatId = await checkAuthBody(env, body);
@@ -1547,12 +1667,15 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
 
 // ═══════════════ 入口 ═══════════════
 
+interface TgUser { id: number; first_name?: string; username?: string }
+
 interface TgUpdate {
-  message?: { chat: { id: number }; text?: string };
+  message?: { chat: { id: number; type?: string }; from?: TgUser; text?: string };
   callback_query?: {
     id: string;
     data?: string;
-    message?: { chat: { id: number } };
+    from?: TgUser;
+    message?: { chat: { id: number; type?: string } };
   };
 }
 
@@ -1576,15 +1699,18 @@ export default {
       // 内联按钮回调（炸房提醒一键打卡）
       if (update.callback_query?.data && update.callback_query.message) {
         const cb = update.callback_query;
-        ctx.waitUntil(handleCallback(env, cb.message!.chat.id, cb.id, cb.data!));
+        const cbGroup = (cb.message!.chat.type ?? 'private') !== 'private';
+        ctx.waitUntil(handleCallback(env, cb.message!.chat.id, cb.id, cb.data!, cb.from, cbGroup));
         return new Response('ok', { status: 200 });
       }
 
       const chatId = update.message?.chat.id;
       const text = update.message?.text;
       if (chatId && text) {
+        // 群里是一群人共用一份列表，得知道每条命令是谁发的
+        const isGroup = (update.message?.chat.type ?? 'private') !== 'private';
         // 先响应 Telegram，命令处理放后台
-        ctx.waitUntil(handleCommand(env, chatId, text));
+        ctx.waitUntil(handleCommand(env, chatId, text, update.message?.from, isGroup));
       }
       return new Response('ok', { status: 200 });
     }

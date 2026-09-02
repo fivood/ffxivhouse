@@ -103,6 +103,9 @@ public class GeneralSettings
     /// <summary>上次成功同步的时间</summary>
     public DateTimeOffset? CloudSyncedAt { get; set; }
 
+    /// <summary>石之家账号（可多个）。凭据只存本机，不上云端</summary>
+    public List<Services.RisingStonesAccount> RisingStones { get; set; } = [];
+
     public bool CheckUpdates { get; set; } = true;
     public string UpdateCheckUrl { get; set; } =
         "https://api.github.com/repos/fivood/ffxivhouse/releases/latest";

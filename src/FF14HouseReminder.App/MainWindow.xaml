@@ -330,7 +330,8 @@
                         <Run Text=" 我的房产"/>
                         <Run Text="  45 天未进屋会拆除" FontWeight="Normal" Foreground="#4A5D66" FontSize="11"/>
                     </TextBlock>
-                    <Button Content="＋" Style="{StaticResource RetroBtn}" FontWeight="Bold"
+                    <Button Content="+" Style="{StaticResource RetroBtn}" FontWeight="Bold"
+                            Width="40" Height="18" Padding="0" FontSize="13" Margin="3,0,0,0"
                             DockPanel.Dock="Right" VerticalAlignment="Center"
                             ToolTip="登记我的房产"
                             Command="{Binding ToggleHomeFormCommand}"/>

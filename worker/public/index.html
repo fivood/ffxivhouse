@@ -114,6 +114,9 @@
   .icon-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 10px; }
   .icon-btn svg { display: block; }
   .icon-btn.on { background: var(--link); color: #fff; }
+  /* 单行开关：勾选框和说明挤在一行 */
+  .opt-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; cursor: pointer; }
+  .opt-line input { margin: 0; }
   /* 「抽了」点开后就地变输入框，占的还是按钮那块地方 */
   .card-actions .entry-inline { width: 130px; margin: 0; min-height: var(--ctl-h); }
   /* 提醒时间多选片 */
@@ -389,6 +392,11 @@
     截止前提醒（点选时间片，即时生效）：
     <div class="chips" id="leadChips"></div>
     <span class="meta">推送顺序：Telegram → Bark → 微信（有频率限制）</span>
+    <label class="opt-line" title="Bot 拉进群做炸房监控时，群里怎么写你的房">
+      <input type="checkbox" id="groupPublic" onchange="saveGroupPublic()">
+      群里公开我的房屋位置
+      <span class="meta">关掉后群里只写「你 的房（备注）还剩 N 天」，提醒照发</span>
+    </label>
     <button class="wx-toggle" id="tgToggle" onclick="toggleTg()">
       <span id="tgArrow">▸</span> Telegram 推送<span id="tgMiniStatus" style="color:var(--green)"></span>
     </button>
@@ -607,6 +615,7 @@ async function loadWatch() {
     $('wxUidInput').value = data.wxpusherSpt || '';
     $('wxUidStatus').innerHTML = data.wxpusherSpt ? ico('check') + ' 微信推送已开启' : '';
     $('wxMiniStatus').innerHTML = data.wxpusherSpt ? ico('check') + '已开启' : '';
+    $('groupPublic').checked = data.groupPublic !== false;
     $('nickBadge').textContent = data.nickname || '';
 
     $('watchSection').style.display = 'block';
@@ -994,6 +1003,12 @@ function toggleBark() {
   const showing = box.style.display !== 'none';
   box.style.display = showing ? 'none' : 'block';
   $('barkArrow').textContent = showing ? '▸' : '▾';
+}
+
+async function saveGroupPublic() {
+  const open = $('groupPublic').checked;
+  const resp = await api('POST', '/api/grouppublic', { open });
+  toast(resp && resp.ok ? (open ? '群里会写出房号' : '群里不写房号了') : '保存失败，请重试');
 }
 
 async function saveBark() {

@@ -19,6 +19,9 @@ public class HomeEntry
     /// <summary>炸房（被拆除）时间（unix 秒），0=未炸房。拆除后 35 天内可回收资产</summary>
     public long DemolishedAt { get; set; }
 
+    /// <summary>这条是跟着哪个石之家角色走的（角色名）。有值就以石之家的房屋信息为准</summary>
+    public string RisingStonesOwner { get; set; } = "";
+
     [JsonIgnore]
     public HouseKey Key => new(Server, Area, Slot, Id);
 

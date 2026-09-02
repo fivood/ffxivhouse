@@ -70,6 +70,17 @@
                 </StackPanel>
                 <TextBlock x:Name="CloudStatus" Foreground="#8A8A80" FontSize="11" TextWrapping="Wrap"/>
 
+                <TextBlock Text="── 石之家" Style="{StaticResource H}"/>
+                <TextBlock Foreground="#8A8A80" FontSize="11" TextWrapping="Wrap"
+                           Text="登录后自动读取角色的房屋拆除倒计时，不用再手动打卡。可登录多个账号；登录凭据只存本机，不会上传云端。"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="登录石之家" Style="{StaticResource Btn}" Click="RsLogin_Click"/>
+                    <Button Content="拉取一次" Style="{StaticResource Btn}" Click="RsFetch_Click"
+                            ToolTip="测试凭据是否有效，顺便把返回存到数据目录方便排查"/>
+                    <Button Content="清空账号" Style="{StaticResource Btn}" Click="RsClear_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="RsStatus" Foreground="#8A8A80" FontSize="11" TextWrapping="Wrap"/>
+
                 <TextBlock Text="── 推送渠道" Style="{StaticResource H}"/>
                 <CheckBox Content="Windows 通知（Toast）" IsChecked="{Binding UseToast}"/>
 
