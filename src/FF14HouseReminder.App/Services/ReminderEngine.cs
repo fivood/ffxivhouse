@@ -88,9 +88,8 @@ public class ReminderEngine
                     {
                         Add2(ReminderType.DepositDeadline, h, deposit.AddHours(-h), deposit, watch.Key.ToString(),
                             "抽签金返还即将截止",
-                            $"{watch.DisplayName} 申请抽选时全额支付的金币，要你去点门牌确认才会返还，系统不会自动退！" +
-                            $"返还期限为公示期结束后 90 天，将于 {deposit.LocalDateTime:MM-dd HH:mm} 截止，逾期不再返还。" +
-                            "（不论中标与否都适用：落选是全额返还，中签未购入是扣 50% 后的余额。）");
+                            $"{watch.DisplayName} 申请时全额支付的金币要点门牌确认才返还，系统不会自动退！" +
+                            $"{deposit.LocalDateTime:MM-dd HH:mm} 截止（公示期后 90 天），逾期不再返还。");
                     }
                 }
             }
@@ -209,14 +208,14 @@ public class ReminderEngine
                 {
                     Add2(ReminderType.FurnitureDeadline, days, furnitureDeadline.AddDays(-days), furnitureDeadline, homeKey,
                         $"拆除资产回收即将到期：还剩 {days} 天",
-                        $"{pos} 自动拆除后 35 天内，可去住宅区管理人处回收部分家具庭具，以及购买土地所花金币的 80%。" +
-                        $"将于 {furnitureDeadline.LocalDateTime:MM-dd HH:mm} 到期，逾期无法回收！");
+                        $"{pos} 可去管理人处回收部分家具庭具 + 购地金的 80%，" +
+                        $"{furnitureDeadline.LocalDateTime:MM-dd HH:mm} 截止，逾期无法回收！");
                 }
                 if (now >= furnitureDeadline)
                 {
                     Add2(ReminderType.FurnitureDeadline, 0, now, furnitureDeadline, homeKey,
                         "拆除资产回收已到期",
-                        $"{pos} 的 35 天回收期限已到（家具庭具 + 购地金币的 80%）！若还没回收，请立刻去住宅区管理人处确认！");
+                        $"{pos} 回收期限已到（家具庭具 + 购地金的 80%）！没回收的话立刻去管理人处确认！");
                 }
                 continue; // 炸房的不再做进房倒计时
             }
@@ -230,11 +229,11 @@ public class ReminderEngine
                     days >= 15 ? "已进入自动拆除准备" : $"炸房警告：还剩 {days} 天",
                     $"{pos} 已超过 {45 - days} 天未进屋，" +
                     (days >= 15
-                        ? "已被列为撤除对象、进入「自动拆除准备」状态，任务情报-房屋里能看到剩余天数。"
+                        ? "已被列为撤除对象（任务情报-房屋可见剩余天数）。"
                         : days <= 1
                             ? "今天必须进屋，否则将被自动拆除！"
                             : "记得上线进一次屋（要进入室内才算）。") +
-                    "个人房只认房主进屋；部队房部队任一成员进屋即可解除。" +
+                    "部队房任一成员进屋即可。" +
                     $"进屋后在「我的房产」里打卡。死线：{deadline.LocalDateTime:MM-dd HH:mm}");
             }
             // 已过期：立即提醒一次

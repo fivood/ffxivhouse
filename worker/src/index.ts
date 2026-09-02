@@ -434,31 +434,26 @@ function findArea(token: string): number {
 
 const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 
-命令：
-/watch 服务器 房区 区号 房号 — 关注（默认"计划抽"）
-　例：/watch 萌芽池 白银乡 14 43
+关注房屋：
+/watch 萌芽池 白银乡 14 43 — 关注（默认"计划抽"）
 /list — 我的关注与倒计时
-/mode 序号 [申请号码] — 切换 计划抽/已报名，可顺手记下申请号
+/mode 序号 [申请号] — 切换 计划抽/已报名
 /unwatch 序号 — 取消关注
-/lead 24,1 — 截止前提醒提前量（小时，逗号分隔）
-/notify — 五类提醒的开关（/notify 序号 切换）
-/bark key — Bark 推送（iOS）；/bark off 关闭
-/name 名字 — 设置网页版显示的昵称
-/servers — 服务器列表
-/panel — 打开网页面板（免绑定，点按钮即用）
-/link — 网页版和桌面端的登录令牌（含整链接）
-/help — 本帮助
 
-提醒时机：报名截止前 / 开奖 / 公示期确认归属死线 / 抽签金返还死线 / 下轮开抽
+提醒设置：
+/lead 24,1 — 提前量（小时）
+/notify — 五类提醒开关
+/panel — 网页面板（免绑定）
 
-炸房提醒（连续 30 天未进屋进入拆除准备，45 天自动拆除）：
-/myhome 服务器 房区 区号 房号 [角色名] — 登记我的房产
-　例：/myhome 萌芽池 白银乡 14 43 阿光
-/entered [序号] [日期] — 进屋打卡；带日期=补签（如 /entered 1 8-30）
-/demolished [序号] — 标记房子已被拆除（开始 35 天资产回收倒计时），再发一次取消
-/homes — 我的房产与炸房倒计时
+炸房提醒（30 天不进屋进拆除准备，45 天拆除）：
+/myhome 萌芽池 白银乡 14 43 阿光 — 登记房产
+/entered [序号] [日期] — 进屋打卡 / 补签
+/demolished [序号] — 标记已拆除（35 天资产回收倒计时）
+/homes — 我的房产
 
-数据来源：house.ffxiv.cyou（玩家上报，可能有延迟）`;
+其他：/name 昵称 · /bark key · /servers · /link · /help
+
+数据来源：house.ffxiv.cyou（玩家上报，可能延迟）`;
 
 function fmtTime(unixSec: number): string {
   return new Date(unixSec * 1000).toLocaleString('zh-CN', {
@@ -783,8 +778,7 @@ ${r.msg}`);
       await saveSub(env, sub);
       await tgSend(env, chatId,
         `🏠 已登记：${server.name} ${AREA_NAMES[area]} ${slot}区 ${plotId}号（${label || '我的房'}）\n` +
-        `已按现在起算 ${DEMOLITION_DAYS} 天倒计时。如果最近没进过屋，进屋后发 /entered 校准。\n` +
-        `提醒：连续 30 天未进屋会被列为撤除对象，45 天自动拆除，以游戏内规则为准。`);
+        `倒计时 ${DEMOLITION_DAYS} 天起算。最近没进过屋的话，进屋后发 /entered 校准。`);
       return;
     }
 
@@ -867,7 +861,7 @@ ${r.msg}`);
         h.fired = [];
         await saveSub(env, sub);
         await tgSend(env, chatId,
-          `已标记「${h.label}」被拆除。\n🪑 ${FURNITURE_DAYS} 天内可去住宅区管理人处回收部分家具庭具 + 购地金币的 80%（至 ${fmtTime(h.demolishedAt + FURNITURE_DAYS * 86400)}），到期前会再提醒你。`);
+          `已标记「${h.label}」被拆除。\n🪑 ${FURNITURE_DAYS} 天内去管理人处回收家具庭具 + 购地金的 80%（至 ${fmtTime(h.demolishedAt + FURNITURE_DAYS * 86400)}）。`);
       }
       return;
     }
@@ -965,9 +959,8 @@ async function runReminders(env: Env): Promise<void> {
           due.push({
             chatId: sub.chatId,
             title: `🪑 拆除资产回收即将到期：还剩 ${days} 天`,
-            body: `${pos}\n自动拆除后 ${FURNITURE_DAYS} 天内可去住宅区管理人处回收部分家具庭具，`
-              + `以及购买土地所花金币的 80%。`
-              + `\n将于 ${fmtTime(fDeadline)} 到期，逾期无法回收！`,
+            body: `${pos}\n可去管理人处回收部分家具庭具 + 购地金的 80%，`
+              + `${fmtTime(fDeadline)} 截止，逾期无法回收！`,
             homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
           });
         }
@@ -977,8 +970,7 @@ async function runReminders(env: Env): Promise<void> {
           due.push({
             chatId: sub.chatId,
             title: '🪑 拆除资产回收已到期',
-            body: `${pos}\n自动拆除后 ${FURNITURE_DAYS} 天回收期限已到（家具庭具 + 购地金币的 80%）！`
-              + `若还没回收，请立刻去住宅区管理人处确认！`,
+            body: `${pos}\n回收期限已到（家具庭具 + 购地金的 80%）！没回收的话立刻去管理人处确认！`,
             homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
           });
         }
@@ -1007,12 +999,11 @@ async function runReminders(env: Env): Promise<void> {
           // 15 天档＝连续 30 天未进屋，游戏里此时才刚被列为撤除对象（任务情报里会显示）
           body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进屋，`
             + (days >= 15
-                ? `已被列为撤除对象、进入「自动拆除准备」状态，任务情报-房屋里能看到剩余天数。`
+                ? `已被列为撤除对象（任务情报-房屋可见剩余天数）。`
                 : days <= 1
                   ? `今天必须进屋，否则将被自动拆除！`
                   : `记得上线进一次屋（要进入室内才算）。`)
-            + `\n个人房只认房主进屋；部队房部队任一成员进屋即可解除。`
-            + `\n进屋后点下方按钮或发 /entered 打卡。`,
+            + `\n部队房任一成员进屋即可。进屋后点下方按钮打卡。`,
           homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
         });
       }
@@ -1053,9 +1044,8 @@ async function runReminders(env: Env): Promise<void> {
             due.push({
               chatId: sub.chatId,
               title: '💰 抽签金返还即将截止',
-              body: `${pos}\n申请抽选时全额支付的金币，要你去点门牌确认才会返还，系统不会自动退！`
-                + `\n返还期限为公示期结束后 ${DEPOSIT_DAYS} 天，将于 ${fmtTime(w.depositDeadline)} 截止，逾期不再返还。`
-                + `\n（不论中标与否都适用：落选是全额返还，中标未购入是扣 50% 后的余额。）`,
+              body: `${pos}\n申请时全额支付的金币要点门牌确认才返还，系统不会自动退！`
+                + `\n${fmtTime(w.depositDeadline)} 截止（公示期后 ${DEPOSIT_DAYS} 天），逾期不再返还。`,
             });
           }
         }
@@ -1097,7 +1087,7 @@ async function runReminders(env: Env): Promise<void> {
             for (const h of sub.leadHours) {
               consider(0, h, phase.end - h * 3600, '⏰ 抽房报名即将截止',
                 `${pos}\n申请期将于 ${fmtTime(phase.end)} 截止，想去抽记得上线报名！`
-                + `\n报名需全额支付土地价格，参加后无法主动取消，且每个角色同时只能参与一处土地。`);
+                + `\n报名需全额支付土地价格，参加后无法取消。`);
             }
           }
         }
