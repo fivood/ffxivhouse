@@ -524,6 +524,20 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task OpenUpdate()
     {
+#if FULL_BUILD
+        // 发布的安装包是公开版，一键更新会把本地直报那套悄悄换掉。
+        // 完整版自己从源码构建，这里只把发布页打开告诉你出新版了
+        if (_updates.ReleaseUrl != null)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = _updates.ReleaseUrl, UseShellExecute = true
+            });
+        }
+        await Task.CompletedTask;
+        return;
+#pragma warning disable CS0162
+#endif
         if (_updates.DownloadUrl == null)
         {
             if (_updates.ReleaseUrl == null) return;
@@ -559,6 +573,9 @@ public partial class MainViewModel : ObservableObject
         {
             _updates.ProgressChanged -= OnUpdateProgress;
         }
+#if FULL_BUILD
+#pragma warning restore CS0162
+#endif
     }
 
     private void OnUpdateProgress(int pct) => Application.Current.Dispatcher.Invoke(() =>
