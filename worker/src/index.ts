@@ -236,6 +236,19 @@ type Reports = Record<string, [number, number]>;
 
 const repKey = (area: number, slot: number, id: number) => `${area}:${slot}:${id}`;
 
+/**
+ * 房区空置情况：{ "区:小区": [看到的时间, 60 位 0/1（1=有人住）] }。
+ * 售楼中心的列表里只有在售的地块，「有人住」是靠「不在列表里」推出来的；
+ * 插件逛一圈房区能拿到全部 60 块地的真实归属，比推的准。
+ */
+type Wards = Record<string, [number, string]>;
+
+const wardKey = (area: number, slot: number) => `${area}:${slot}`;
+
+async function getWards(env: Env, serverId: number): Promise<Wards> {
+  return (await env.KV.get<Wards>(`wards:${serverId}`, 'json')) ?? {};
+}
+
 async function getReports(env: Env, serverId: number): Promise<Reports> {
   return (await env.KV.get<Reports>(`rep:${serverId}`, 'json')) ?? {};
 }
@@ -1503,6 +1516,39 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (item.mode === 1 && (was.mode !== 1 || was.entryNo !== item.entryNo))
       await pushEntered(env, sub, item);
     return json({ ok: true, mode: item.mode });
+  }
+
+  // 插件逛房区时上报整区 60 块地的归属
+  if (path === '/api/ward' && request.method === 'POST') {
+    const body = (await request.json()) as
+      { u?: number; k?: string; server?: number; area?: number; slot?: number; owned?: string };
+    if ((await checkAuthBody(env, body)) == null) return json({ error: '未绑定或令牌无效' }, 401);
+
+    const { server, area, slot, owned } = body;
+    if (typeof server !== 'number' || !ALL_SERVERS.some(s => s.id === server)
+      || typeof area !== 'number' || area < 0 || area > 4
+      || typeof slot !== 'number' || slot < 0 || slot > 29
+      || typeof owned !== 'string' || !/^[01]{60}$/.test(owned)) {
+      return json({ error: '参数无效（owned 需要 60 位 0/1）' }, 400);
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const wards = await getWards(env, server);
+    wards[wardKey(area, slot)] = [nowSec, owned];
+    // 三十天没人再逛过的就别留着了，房区变化很快
+    for (const [k, v] of Object.entries(wards)) if (nowSec - v[0] > 30 * 86400) delete wards[k];
+    await env.KV.put(`wards:${server}`, JSON.stringify(wards), { expirationTtl: 60 * 86400 });
+    return json({ ok: true });
+  }
+
+  // 房区空置情况（网页的房区图用；没人逛过的房区就没有，前端退回按在售列表推测）
+  if (path === '/api/wards' && request.method === 'GET') {
+    const server = parseInt(url.searchParams.get('server') ?? '', 10);
+    if (Number.isNaN(server)) return json({ error: 'server 参数无效' }, 400);
+    const wards = await getWards(env, server);
+    const out: Record<string, { at: number; owned: string }> = {};
+    for (const [k, v] of Object.entries(wards)) out[k] = { at: v[0], owned: v[1] };
+    return json(out);
   }
 
   // ── 桌面端更新：版本检查和安装包都从这儿走 ──

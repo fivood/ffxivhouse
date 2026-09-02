@@ -272,6 +272,9 @@
                                     <Run Text="  "/>
                                     <Run Text="{Binding CountdownText, Mode=OneWay}"
                                          Foreground="{Binding CountdownColor}"/>
+                                    <Run Text="{Binding ParticipateText, Mode=OneWay}"
+                                         Foreground="#8B5E3C" FontWeight="Bold"
+                                         ToolTip="门牌上的已抽选人数，只有卫月插件点过门牌才有"/>
                                 </TextBlock>
                                 <TextBlock FontSize="11" Foreground="{StaticResource TextDim}" Margin="0,5,0,0">
                                     <Run Text="{Binding SourceText, Mode=OneWay}"/>

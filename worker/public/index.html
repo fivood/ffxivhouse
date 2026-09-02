@@ -468,6 +468,8 @@
 const $ = id => document.getElementById(id);
 let cred = { u: null, k: null };
 let sales = [];
+// 房区空置实测（卫月插件逛房区时上报的），键是 "区:小区"；没有的房区退回按在售列表推测
+let wards = {};
 let myWatches = [];
 
 // ── 绑定 ──
@@ -580,6 +582,8 @@ async function loadSales(manual) {
   try {
     sales = await (await fetch(`/api/sales?server=${server}`)).json();
     if (!Array.isArray(sales)) throw new Error();
+    // 实测的空置情况是可选的，拿不到就算了，不影响房源列表
+    try { wards = await (await fetch(`/api/wards?server=${server}`)).json() || {}; } catch { wards = {}; }
     renderSales();
     drawMap();   // 空地/已住人是按在售列表算的，数据一到就重画
   } catch {
@@ -1103,13 +1107,16 @@ function drawMap(hitId) {
     const listed = new Map(sales
       .filter(h => h.server === srv && h.area === area && h.slot === slot)
       .map(h => [h.id, h.state === 1 && (h.purchaseType === 1 || h.purchaseType === 2)]));
-    const known = sales.length > 0;
+    // 插件逛过这个房区的话，有没有人住是实测的，不用靠「不在列表里」推
+    const scan = wards[`${area}:${slot}`];
+    const known = sales.length > 0 || !!scan;
     let freeCount = 0, emptyCount = 0;
 
     const cells = list.map(([x, z, r], i) => {
       const no = half * 30 + i + 1;
-      const buyable = listed.get(no);            // undefined = 不在列表 = 有人住
-      const state = buyable === undefined ? 'taken' : buyable ? 'free' : 'empty';
+      const buyable = listed.get(no);            // undefined = 不在列表
+      const occupied = scan ? scan.owned[no - 1] === '1' : buyable === undefined;
+      const state = occupied ? 'taken' : buyable ? 'free' : 'empty';
       if (state === 'free') freeCount++;
       if (state === 'empty') emptyCount++;
       const tip = { free: ' · 可抽', empty: ' · 空置（未开放）', taken: ' · 已住人' }[state];

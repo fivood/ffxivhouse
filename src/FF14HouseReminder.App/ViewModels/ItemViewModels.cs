@@ -66,6 +66,9 @@ public partial class WatchViewModel : ObservableObject
     }
 
     public string DisplayName => Item.DisplayName;
+    /// <summary>已抽选人数（只有卫月插件点过门牌才有）</summary>
+    [ObservableProperty] private string _participateText = "";
+
     public string ModeText => (Item.Mode == WatchMode.Planned ? "计划抽" : "已报名")
         + (Item.EntryNo.Length > 0 ? $" #{Item.EntryNo}" : "");
     public string ToggleModeText => Item.Mode == WatchMode.Planned ? "抽了" : "✔ 改回计划抽";
@@ -88,6 +91,9 @@ public partial class WatchViewModel : ObservableObject
         StateText = house.StateText + (phase.Estimated ? "（推测）" : "");
         StateColor = Countdown.StateColor(phase.State);
         CountdownColor = Countdown.UrgencyColor(now, phase.PhaseEnd);
+        // 人数只有卫月插件点门牌才拿得到，售楼中心那份一直是 0，所以只认本地直报的
+        ParticipateText = snapshot.Source == HouseDataSource.Local && phase.State == LotteryState.Available
+            ? $"　{house.Participate} 人参与" : "";
         CountdownText = phase.State switch
         {
             LotteryState.Available => "报名截止 " + Countdown.To(now, phase.PhaseEnd),
@@ -203,8 +209,19 @@ public partial class HouseItemViewModel : ObservableObject
 
     public string PositionText => $"{Snapshot.Data.PositionText} [{Snapshot.Data.SizeName}]";
     public string PriceText => $"{Snapshot.Data.Price:N0} 金币";
-    public string Badges => $"{Snapshot.Data.PurchaseTypeText} · {Snapshot.Data.RegionTypeText}" +
-                            (Snapshot.Source == HouseDataSource.Local ? " · 📡" : "");
+    public string Badges => $"{Snapshot.Data.PurchaseTypeText} · {Snapshot.Data.RegionTypeText}"
+                            + ParticipateText
+                            + (Snapshot.Source == HouseDataSource.Local ? " · 📡" : "");
+
+    /// <summary>
+    /// 已抽选人数。售楼中心的这个字段一直是 0，只有卫月插件点门牌才拿得到，
+    /// 所以只在本地直报的数据上显示，远端数据一律当未知。
+    /// </summary>
+    public string ParticipateText =>
+        Snapshot.Source == HouseDataSource.Local
+        && (LotteryState)Snapshot.Data.State == LotteryState.Available
+            ? $" · {Snapshot.Data.Participate} 人参与"
+            : "";
     public string WatchButtonText => IsWatched ? "✔ 已关注" : "✚ 关注";
 
     public void Refresh(DateTimeOffset now)
