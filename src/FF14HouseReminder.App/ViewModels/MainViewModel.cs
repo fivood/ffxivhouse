@@ -517,14 +517,50 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    /// 一键更新：下载 → 解压 → 让新版本接手替换。
+    /// 拿不到直链（老配置指着 GitHub API）就退回打开发布页让用户手动下。
+    /// </summary>
     [RelayCommand]
-    private void OpenUpdate()
+    private async Task OpenUpdate()
     {
-        if (_updates.ReleaseUrl == null) return;
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        if (_updates.DownloadUrl == null)
         {
-            FileName = _updates.ReleaseUrl,
-            UseShellExecute = true
-        });
+            if (_updates.ReleaseUrl == null) return;
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = _updates.ReleaseUrl,
+                UseShellExecute = true
+            });
+            return;
+        }
+
+        var mb = _updates.DownloadSize / 1024d / 1024d;
+        if (MessageBox.Show(
+                $"下载 v{_updates.LatestVersion}（约 {mb:F0} MB）并替换当前版本？"
+                + "\n下载完程序会自动重启，关注和房产都不受影响。",
+                "更新", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
+            return;
+
+        _updates.ProgressChanged += OnUpdateProgress;
+        try
+        {
+            if (await _updates.DownloadAndApplyAsync())
+            {
+                Application.Current.Shutdown();   // 交给新版本去覆盖
+                return;
+            }
+            UpdateText = "更新失败，点这里手动下载";
+            MessageBox.Show("下载或解压没成功，日志里有细节。可以到发布页手动下载覆盖。",
+                "更新", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _updates.DownloadUrl = null;   // 下次点就直接开发布页
+        }
+        finally
+        {
+            _updates.ProgressChanged -= OnUpdateProgress;
+        }
     }
+
+    private void OnUpdateProgress(int pct) => Application.Current.Dispatcher.Invoke(() =>
+        UpdateText = pct >= 0 ? $"下载中 {pct}%" : $"新版本 v{_updates.LatestVersion} 可用");
 }

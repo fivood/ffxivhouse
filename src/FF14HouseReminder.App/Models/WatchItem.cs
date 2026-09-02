@@ -107,8 +107,8 @@ public class GeneralSettings
     public List<Services.RisingStonesAccount> RisingStones { get; set; } = [];
 
     public bool CheckUpdates { get; set; } = true;
-    public string UpdateCheckUrl { get; set; } =
-        "https://api.github.com/repos/fivood/ffxivhouse/releases/latest";
+    /// <summary>版本检查走自己的域名中转：国内直连 GitHub 经常超时，返回里还带安装包直链</summary>
+    public string UpdateCheckUrl { get; set; } = "https://ff14.70015.net/api/latest";
 
     public bool FirstRunCompleted { get; set; }
 

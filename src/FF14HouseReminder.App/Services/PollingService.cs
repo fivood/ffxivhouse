@@ -112,6 +112,15 @@ public static class AutoStart
         return key?.GetValue(AppName) != null;
     }
 
+    /// <summary>注册表里那条自启命令指的还是不是当前这个 exe（更新或搬家后会变）</summary>
+    public static bool PointsAtCurrentExe()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+        var cmd = key?.GetValue(AppName) as string;
+        var exe = Environment.ProcessPath;
+        return cmd != null && exe != null && cmd.Contains(exe, StringComparison.OrdinalIgnoreCase);
+    }
+
     public static void Set(bool enabled)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunKey);

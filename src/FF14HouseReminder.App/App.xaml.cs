@@ -56,12 +56,38 @@ public partial class App : Application
             return;
         }
 
+        // --apply-update 模式：由旧版本拉起来，等它退出后把自己覆盖过去
+        var applyIndex = Array.IndexOf(e.Args, "--apply-update");
+        if (applyIndex >= 0 && applyIndex + 2 < e.Args.Length)
+        {
+            ApplyUpdate(e.Args[applyIndex + 1].Trim('"'), e.Args[applyIndex + 2]);
+            Shutdown();
+            return;
+        }
+
         // --refresh 模式：任务计划每天叫醒一次，只拉数据重排提醒，不开窗口
         if (e.Args.Contains("--refresh"))
         {
             await RunRefreshModeAsync();
             Shutdown();
             return;
+        }
+
+        // 首次运行且待的地方不合适（下载夹、Program Files、临时目录）就先搬家：
+        // 自动更新要覆盖自己所在的文件，写不了就永远更新不了
+        if (!Config.Config.General.FirstRunCompleted && !InstallLocation.IsFine())
+        {
+            var ans = MessageBox.Show(
+                "把「抽房了吗」安装到用户目录？" + "\n\n" +
+                InstallLocation.PreferredDir + "\n\n" +
+                "现在的位置要么会被清理掉，要么写不进去，自动更新会失败。" + "\n" +
+                "点「是」会复制过去、建一个桌面快捷方式，然后从新位置启动。",
+                "抽房了吗", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (ans == MessageBoxResult.Yes && InstallLocation.MoveAndRestart())
+            {
+                Shutdown();
+                return;
+            }
         }
 
         // 单实例
@@ -97,15 +123,23 @@ public partial class App : Application
         _ = Ingest.StartAsync();
 #endif
 
-        // 自启开关与注册表保持一致
-        if (AutoStart.IsEnabled() != Config.Config.General.AutoStart)
-            AutoStart.Set(Config.Config.General.AutoStart);
+        // 自启开关与注册表保持一致；程序换过位置的话注册表里那条路径也得刷新
+        if (AutoStart.IsEnabled() != Config.Config.General.AutoStart) AutoStart.Set(Config.Config.General.AutoStart);
+        else if (Config.Config.General.AutoStart && !AutoStart.PointsAtCurrentExe()) AutoStart.Set(true);
 
         Polling.Start();
         Reminders.Recompute();
 
         if (Config.Config.General.CheckUpdates)
+        {
+            // 老配置里存的是 GitHub API 地址，那条路拿不到安装包直链，也常被墙——迁到自家中转
+            if (Config.Config.General.UpdateCheckUrl.Contains("api.github.com"))
+            {
+                Config.Config.General.UpdateCheckUrl = "https://ff14.70015.net/api/latest";
+                Config.Save();
+            }
             _ = Updates.CheckAsync(Config.Config.General.UpdateCheckUrl);
+        }
 
         var startMinimized = e.Args.Contains("--minimized");
         if (!startMinimized)
@@ -130,6 +164,54 @@ public partial class App : Application
                 "提醒将通过 Windows 通知发出，也可在设置中配置 Telegram / 微信推送。" +
                 (hint.Length > 0 ? "\n\n" + hint : ""),
                 "抽房了吗", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    /// <summary>
+    /// 把自己复制到 target 覆盖旧版本，然后启动它。
+    ///
+    /// 单文件 exe 运行中被系统锁着，没法自己覆盖自己，所以这一步只能由新版本
+    /// 在旧版本退出之后来做——本进程就是从更新包里解出来的新版本。
+    /// </summary>
+    private static void ApplyUpdate(string target, string oldPid)
+    {
+        try
+        {
+            if (int.TryParse(oldPid, out var pid))
+            {
+                try
+                {
+                    var old = System.Diagnostics.Process.GetProcessById(pid);
+                    if (!old.WaitForExit(30_000))
+                    {
+                        Logger.Error("更新失败：旧版本 30 秒没退出", new TimeoutException());
+                        return;
+                    }
+                }
+                catch (ArgumentException) { /* 已经退干净了 */ }
+            }
+
+            // 文件句柄有时会晚一点才放开，重试几次
+            for (var i = 0; ; i++)
+            {
+                try { File.Copy(Environment.ProcessPath!, target, true); break; }
+                catch (IOException) when (i < 10) { Thread.Sleep(500); }
+            }
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = target,
+                WorkingDirectory = Path.GetDirectoryName(target),
+                UseShellExecute = false,
+            });
+            Logger.Info($"更新完成，已替换 {target}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("应用更新失败", ex);
+            MessageBox.Show(
+                $"自动更新没能完成：{ex.Message}\n\n可以到发布页手动下载覆盖。",
+                "抽房了吗", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

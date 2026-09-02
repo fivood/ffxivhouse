@@ -1374,6 +1374,24 @@ async function enrichWatch(env: Env, sub: UserSub): Promise<unknown[]> {
   return result;
 }
 
+interface GhAsset { name: string; size: number; browser_download_url: string }
+interface GhRelease { tag_name: string; html_url: string; body?: string; assets: GhAsset[] }
+
+/** 最新 release（缓存 10 分钟：更新检查是每次启动都发的，别把 GitHub 的额度耗光） */
+async function getLatestRelease(env: Env): Promise<GhRelease> {
+  const cached = await env.KV.get<{ at: number; rel: GhRelease }>('release:latest', 'json');
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (cached && nowSec - cached.at < 600) return cached.rel;
+
+  const resp = await fetch('https://api.github.com/repos/fivood/ffxivhouse/releases/latest', {
+    headers: { 'User-Agent': UA, Accept: 'application/vnd.github+json' },
+  });
+  if (!resp.ok) throw new Error(`GitHub ${resp.status}`);
+  const rel = (await resp.json()) as GhRelease;
+  await env.KV.put('release:latest', JSON.stringify({ at: nowSec, rel }), { expirationTtl: 3600 });
+  return rel;
+}
+
 async function handleApi(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
 
@@ -1485,6 +1503,27 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (item.mode === 1 && (was.mode !== 1 || was.entryNo !== item.entryNo))
       await pushEntered(env, sub, item);
     return json({ ok: true, mode: item.mode });
+  }
+
+  // ── 桌面端更新：版本检查和安装包都从这儿走 ──
+  // 国内直连 GitHub Release 经常超时，绕一道自己的域名稳得多，
+  // 顺带躲开 GitHub API 对未认证请求的速率限制
+  if (path === '/api/latest' && request.method === 'GET') {
+    try {
+      const rel = await getLatestRelease(env);
+      const asset = rel.assets.find(a => a.name.endsWith('-public.zip'));
+      if (!asset) return json({ error: '这一版没有公开版安装包' }, 404);
+      return json({
+        version: rel.tag_name.replace(/^[vV]/, ''),
+        name: asset.name,
+        size: asset.size,
+        url: `${WEB_BASE}/dl/${encodeURIComponent(asset.name)}`,
+        page: rel.html_url,
+        notes: (rel.body ?? '').slice(0, 2000),
+      });
+    } catch (e) {
+      return json({ error: `拿不到版本信息：${e}` }, 502);
+    }
   }
 
   // 插件上报门牌上的已抽选人数（游戏内才看得到，售楼中心拿不到）
@@ -1748,6 +1787,29 @@ export default {
 
     if (url.pathname.startsWith('/api/')) {
       return handleApi(request, env, url);
+    }
+
+    // 安装包中转：只认最新 release 里真实存在的资产名，
+    // 不然这就成了一个任给 URL 的公开代理
+    if (url.pathname.startsWith('/dl/') && request.method === 'GET') {
+      const want = decodeURIComponent(url.pathname.slice(4));
+      try {
+        const rel = await getLatestRelease(env);
+        const asset = rel.assets.find(a => a.name === want);
+        if (!asset) return new Response('not found', { status: 404 });
+        const upstream = await fetch(asset.browser_download_url, { headers: { 'User-Agent': UA } });
+        if (!upstream.ok || !upstream.body) return new Response('upstream error', { status: 502 });
+        return new Response(upstream.body, {
+          headers: {
+            'Content-Type': 'application/zip',
+            'Content-Length': String(asset.size),
+            'Content-Disposition': `attachment; filename="${asset.name}"`,
+            'Cache-Control': 'public, max-age=86400',
+          },
+        });
+      } catch {
+        return new Response('bad gateway', { status: 502 });
+      }
     }
 
     if (url.pathname === '/webhook' && request.method === 'POST') {
