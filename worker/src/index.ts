@@ -467,6 +467,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 拉我进群 = 群内炸房监控：群友各自 /myhome 登记，
 到点我在群里点名，谁看到谁顺手提醒本人一声。
 群里只有 /myhome /entered /demolished /homes 四条；
+序号只认你自己那几套（有两套就是 1 和 2，不用去数别人的）；
 抽房关注和推送设置是个人的，只在私聊有效。
 不想让群里看到具体房号：私聊发 /public off，群里就只写
 「你 的房（备注）还剩 N 天」，提醒照发。
@@ -533,6 +534,15 @@ async function groupPos(env: Env, h: HomeEntry, full: string, cache: Map<number,
     cache.set(h.ownerId, open);
   }
   return open ? `${h.ownerName} 的 ${full}` : `${h.ownerName} 的房（${h.label}）`;
+}
+
+/**
+ * 群里按序号操作时只取自己那几套。老数据没有 ownerId，当成谁都能动（升级前登记的）。
+ * 注意返回的是原对象的引用，改了照样能存回去。
+ */
+function mineOnly(homes: HomeEntry[], isGroup: boolean, sender?: TgUser): HomeEntry[] {
+  if (!isGroup) return homes;
+  return homes.filter(h => !h.ownerId || h.ownerId === sender?.id);
 }
 
 /** 群里显示用的称呼：有 username 就用 @xxx（顺带能 @ 到人），否则用名字 */
@@ -897,9 +907,13 @@ ${r.msg}`);
 
     case '/entered': {
       const sub = await getSub(env, chatId);
-      const homes = sub.homes ?? [];
+      // 群里那份列表是全群的，序号要是按全群数，一个人有两套就得先去数别人的。
+      // 所以群里只认自己的房，序号也按自己那几套从 1 数起
+      const homes = mineOnly(sub.homes ?? [], isGroup, sender);
       if (homes.length === 0) {
-        await tgSend(env, chatId, '还没有登记房产，用 /myhome 登记。');
+        await tgSend(env, chatId, isGroup
+          ? '你还没在这个群登记房产，用 /myhome 登记。'
+          : '还没有登记房产，用 /myhome 登记。');
         return;
       }
 
@@ -953,9 +967,11 @@ ${r.msg}`);
 
     case '/demolished': {
       const sub = await getSub(env, chatId);
-      const homes = sub.homes ?? [];
+      const homes = mineOnly(sub.homes ?? [], isGroup, sender);
       if (homes.length === 0) {
-        await tgSend(env, chatId, '还没有登记房产，用 /myhome 登记。');
+        await tgSend(env, chatId, isGroup
+          ? '你还没在这个群登记房产，用 /myhome 登记。'
+          : '还没有登记房产，用 /myhome 登记。');
         return;
       }
       let idx = homes.length === 1 ? 0 : -1;
@@ -999,13 +1015,20 @@ ${r.msg}`);
       const lines = await Promise.all(homes.map(async (h, i) => {
         const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
         const full = `${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`;
-        const pos = `${i + 1}. ` + (isGroup ? await groupPos(env, h, full, cache) : full);
+        // 群里全局序号没意义（命令只认自己那几套），改成标各人的第几套
+        const seq = isGroup
+          ? (() => {
+              const mine = homes.filter(x => x.ownerId && x.ownerId === h.ownerId);
+              return mine.length > 1 ? `#${mine.indexOf(h) + 1} ` : '';
+            })()
+          : `${i + 1}. `;
+        const pos = seq + (isGroup ? await groupPos(env, h, full, cache) : full);
         if (h.demolishedAt && h.demolishedAt > 0) {
           const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
           const days = Math.floor((fDeadline - nowSec) / 86400);
           return `${pos}\n　💥 已炸房，资产回收${days >= 0 ? `还剩 ${days} 天` : '已到期！'}（${fmtTime(fDeadline).slice(0, 5)} 到期）`;
         }
-        if (h.lastEnteredAt <= 0) return `${pos}\n　进屋时间未知，进屋后发 /entered ${i + 1}`;
+        if (h.lastEnteredAt <= 0) return `${pos}\n　进屋时间未知，进屋后发 /entered${seq.trim() ? ' ' + seq.trim().slice(1) : ''}`;
         const deadline = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
         const remain = deadline - nowSec;
         const days = Math.floor(remain / 86400);
