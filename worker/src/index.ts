@@ -113,11 +113,20 @@ const DEPOSIT_DAYS = 90;
 /** 拆除后资产回收期限（天）：家具庭具 + 购地金币的 80% */
 const FURNITURE_DAYS = 35;
 
-/** YYYY-MM-DD → 北京时间当天 00:00 的 unix 秒（保守，提醒偏早不偏晚）；非法/未来返回错误 */
+/**
+ * 游戏按日本时间数天数，00:00 跨一天。所以所有「第 N 天」的死线都是
+ * 「那件事发生当天的 JST 00:00」再加 N 天，而不是从当时那一刻整整加 N×24 小时——
+ * 后者会比真实死线晚最多一天，等提醒到了房子已经没了。
+ */
+const JST = 9 * 3600;
+const jstDayStart = (sec: number) => Math.floor((sec + JST) / 86400) * 86400 - JST;
+const dayDeadline = (fromSec: number, days: number) => jstDayStart(fromSec) + days * 86400;
+
+/** YYYY-MM-DD → 日本时间当天 00:00 的 unix 秒；非法/未来返回错误 */
 function parseDayStart(date: string): { ts: number } | { error: string } {
   const dm = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!dm) return { error: '日期格式应为 YYYY-MM-DD' };
-  const ts = Math.floor((Date.UTC(+dm[1], +dm[2] - 1, +dm[3]) - 8 * 3600 * 1000) / 1000);
+  const ts = Math.floor(Date.UTC(+dm[1], +dm[2] - 1, +dm[3]) / 1000) - JST;
   if (ts > Math.floor(Date.now() / 1000)) return { error: '不能填未来的日期' };
   return { ts };
 }
@@ -457,7 +466,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 
 炸房提醒（30 天不进屋进拆除准备，45 天拆除）：
 /myhome 萌芽池 白银乡 14 43 阿光 — 登记房产
-/entered [序号] [日期] — 进屋打卡 / 补签
+/entered [序号] [日期] — 进屋打卡 / 补签（天数按日本时间算，00:00 跨一天）
 /demolished [序号] — 标记已拆除（35 天资产回收倒计时）
 /homes — 我的房产
 
@@ -478,6 +487,13 @@ function fmtTime(unixSec: number): string {
   return new Date(unixSec * 1000).toLocaleString('zh-CN', {
     timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
+/** 游戏日的「月/日」。房屋天数按日本时间数，用北京时间显示会差一天，看着像 bug */
+function fmtDay(unixSec: number): string {
+  return new Date(unixSec * 1000).toLocaleString('zh-CN', {
+    timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit',
   });
 }
 
@@ -924,16 +940,16 @@ ${r.msg}`);
         const asNum = parseInt(arg, 10);
         const dm = arg.match(/^(?:(\d{4})[-/年])?(\d{1,2})[-/月](\d{1,2})日?$/);
         if (dm) {
-          const nowUtc8 = new Date(Date.now() + 8 * 3600 * 1000);
-          let year = dm[1] ? parseInt(dm[1], 10) : nowUtc8.getUTCFullYear();
+          const nowJst = new Date(Date.now() + JST * 1000);
+          let year = dm[1] ? parseInt(dm[1], 10) : nowJst.getUTCFullYear();
           const month = parseInt(dm[2], 10) - 1;
           const day = parseInt(dm[3], 10);
           if (month < 0 || month > 11 || day < 1 || day > 31) {
             await tgSend(env, chatId, `日期「${arg}」看不懂，格式如 8-30 或 2026-08-30`);
             return;
           }
-          let ts = Math.floor((Date.UTC(year, month, day) - 8 * 3600 * 1000) / 1000); // 北京时间当天 00:00
-          if (ts > nowSec) ts = Math.floor((Date.UTC(year - 1, month, day) - 8 * 3600 * 1000) / 1000); // 未来日期视为去年
+          let ts = Math.floor(Date.UTC(year, month, day) / 1000) - JST; // 日本时间当天 00:00
+          if (ts > nowSec) ts = Math.floor(Date.UTC(year - 1, month, day) / 1000) - JST; // 未来日期视为去年
           dateSec = ts;
         } else if (!Number.isNaN(asNum) && idx === -1) {
           idx = asNum - 1;
@@ -958,10 +974,10 @@ ${r.msg}`);
       await saveSub(env, sub);
       const h = homes[idx];
       const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
-      const when = dateSec > 0 ? `（补签至 ${fmtTime(dateSec).slice(0, 5)}）` : '';
+      const when = dateSec > 0 ? `（补签至 ${fmtDay(dateSec)}）` : '';
       await tgSend(env, chatId,
         `✅ 已打卡${when}：${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）\n` +
-        `炸房倒计时重置为 ${DEMOLITION_DAYS} 天（至 ${fmtTime(homes[idx].lastEnteredAt + DEMOLITION_DAYS * 86400).slice(0, 5)}）。`);
+        `炸房倒计时重置为 ${DEMOLITION_DAYS} 天（到 ${fmtDay(dayDeadline(homes[idx].lastEnteredAt, DEMOLITION_DAYS))} 为止）。`);
       return;
     }
 
@@ -998,7 +1014,7 @@ ${r.msg}`);
         h.fired = [];
         await saveSub(env, sub);
         await tgSend(env, chatId,
-          `已标记「${h.label}」被拆除。\n🪑 ${FURNITURE_DAYS} 天内去管理人处回收家具庭具 + 购地金的 80%（至 ${fmtTime(h.demolishedAt + FURNITURE_DAYS * 86400)}）。`);
+          `已标记「${h.label}」被拆除。\n🪑 ${FURNITURE_DAYS} 天内去管理人处回收家具庭具 + 购地金的 80%（到 ${fmtDay(dayDeadline(h.demolishedAt, FURNITURE_DAYS))} 为止）。`);
       }
       return;
     }
@@ -1024,16 +1040,16 @@ ${r.msg}`);
           : `${i + 1}. `;
         const pos = seq + (isGroup ? await groupPos(env, h, full, cache) : full);
         if (h.demolishedAt && h.demolishedAt > 0) {
-          const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
+          const fDeadline = dayDeadline(h.demolishedAt, FURNITURE_DAYS);
           const days = Math.floor((fDeadline - nowSec) / 86400);
-          return `${pos}\n　💥 已炸房，资产回收${days >= 0 ? `还剩 ${days} 天` : '已到期！'}（${fmtTime(fDeadline).slice(0, 5)} 到期）`;
+          return `${pos}\n　💥 已炸房，资产回收${days >= 0 ? `还剩 ${days} 天` : '已到期！'}（${fmtDay(fDeadline)} 到期）`;
         }
         if (h.lastEnteredAt <= 0) return `${pos}\n　进屋时间未知，进屋后发 /entered${seq.trim() ? ' ' + seq.trim().slice(1) : ''}`;
-        const deadline = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
+        const deadline = dayDeadline(h.lastEnteredAt, DEMOLITION_DAYS);
         const remain = deadline - nowSec;
         const days = Math.floor(remain / 86400);
         const mark = days <= 5 ? '🔴' : days <= 10 ? '🟠' : '🟢';
-        return `${pos}\n　${mark} 剩余 ${days} 天（最后进屋 ${fmtTime(h.lastEnteredAt)}）`;
+        return `${pos}\n　${mark} 剩余 ${days} 天（最后进屋 ${fmtDay(h.lastEnteredAt)}）`;
       }));
       await tgSend(env, chatId, lines.join('\n'));
       return;
@@ -1096,7 +1112,7 @@ async function runReminders(env: Env): Promise<void> {
 
       // 已炸房：资产回收 35 天死线
       if (h.demolishedAt && h.demolishedAt > 0) {
-        const fDeadline = h.demolishedAt + FURNITURE_DAYS * 86400;
+        const fDeadline = dayDeadline(h.demolishedAt, FURNITURE_DAYS);
         // 同上：只发当前所处的那一档（补的炸房日期很旧时，别先发一条过时的「还剩 10 天」）
         for (let i = 0; i < DEMOLITION_LEAD_DAYS.length; i++) {
           const days = DEMOLITION_LEAD_DAYS[i];
@@ -1113,7 +1129,7 @@ async function runReminders(env: Env): Promise<void> {
             chatId: sub.chatId,
             title: `🪑 拆除资产回收即将到期：还剩 ${days} 天`,
             body: `${pos}\n可去管理人处回收部分家具庭具 + 购地金的 80%，`
-              + `${fmtTime(fDeadline)} 截止，逾期无法回收！`,
+              + `${fmtDay(fDeadline)} 截止，逾期无法回收！`,
             homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
           });
         }
@@ -1131,7 +1147,7 @@ async function runReminders(env: Env): Promise<void> {
       }
 
       if (h.lastEnteredAt <= 0) continue;
-      const deadlineSec = h.lastEnteredAt + DEMOLITION_DAYS * 86400;
+      const deadlineSec = dayDeadline(h.lastEnteredAt, DEMOLITION_DAYS);
 
       // 只发当前所处的那一档：补签一个很旧的进屋日期时，剩 5 天却先发一条「还剩 10 天」是错的
       for (let i = 0; i < DEMOLITION_LEAD_DAYS.length; i++) {
@@ -1412,9 +1428,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         id: h.id, label: h.label,
         lastEnteredAt: h.lastEnteredAt,
         demolishedAt: h.demolishedAt ?? 0,
-        deadline: h.lastEnteredAt > 0 ? h.lastEnteredAt + DEMOLITION_DAYS * 86400 : 0,
-        furnitureDeadline: (h.demolishedAt ?? 0) > 0 ? (h.demolishedAt ?? 0) + FURNITURE_DAYS * 86400 : 0,
-        remainDays: h.lastEnteredAt > 0 ? Math.floor((h.lastEnteredAt + DEMOLITION_DAYS * 86400 - nowSec) / 86400) : -1,
+        deadline: h.lastEnteredAt > 0 ? dayDeadline(h.lastEnteredAt, DEMOLITION_DAYS) : 0,
+        furnitureDeadline: (h.demolishedAt ?? 0) > 0 ? dayDeadline(h.demolishedAt ?? 0, FURNITURE_DAYS) : 0,
+        remainDays: h.lastEnteredAt > 0 ? Math.floor((dayDeadline(h.lastEnteredAt, DEMOLITION_DAYS) - nowSec) / 86400) : -1,
       })),
       items: await enrichWatch(env, sub),
     });
@@ -1639,7 +1655,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       h.server === body.server && h.area === body.area && h.slot === body.slot && h.id === body.id);
     if (!home) return json({ error: '未找到该房产' }, 404);
 
-    // 可选补签日期（YYYY-MM-DD），按北京时间当天 00:00 起算（保守，提醒偏早不偏晚）
+    // 可选补签日期（YYYY-MM-DD），按日本时间当天 00:00 起算（游戏就是这么数天的）
     const day = body.date ? parseDayStart(body.date) : null;
     if (day && 'error' in day) return json(day, 400);
     home.lastEnteredAt = day ? day.ts : Math.floor(Date.now() / 1000);

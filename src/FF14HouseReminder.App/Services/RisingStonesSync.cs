@@ -146,8 +146,7 @@ public static class RisingStonesSync
             $"{ch.Name} 的 {ch.HouseText} 还剩 {remain} 天。石之家只在快拆时才显示这个数，看到就尽快进屋。");
     }
 
-    private static string BeijingDay(long unixSeconds) =>
-        DateTimeOffset.FromUnixTimeSeconds(unixSeconds).ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd");
+    private static string BeijingDay(long unixSeconds) => GameTime.DayString(unixSeconds);
 
     private static string Name(RisingStonesAccount acc) =>
         acc.Nickname.Length > 0 ? acc.Nickname : "石之家账号";

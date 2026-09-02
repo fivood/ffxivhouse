@@ -809,9 +809,10 @@ function renderHomes() {
   }).join('');
 }
 
+// 房屋天数按日本时间数，00:00 跨一天。用浏览器本地时区显示会差一天，看着像 bug
 function fmtDate(unixSec) {
-  const d = new Date(unixSec * 1000);
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return new Date(unixSec * 1000).toLocaleString('zh-CN',
+    { timeZone: 'Asia/Tokyo', month: '2-digit', day: '2-digit' });
 }
 
 async function addHome() {

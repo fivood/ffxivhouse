@@ -308,7 +308,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         HomeHint = "";
-        item.Item.LastEnteredAt = new DateTimeOffset(date, TimeSpan.Zero).ToUnixTimeSeconds();
+        item.Item.LastEnteredAt = GameTime.DayStartOf(date).ToUnixTimeSeconds();
         _config.Save();
         SyncUp(c => c.EnteredAsync(item.Item.Key, date.ToString("yyyy-MM-dd")));
         _reminders.Recompute();
@@ -366,7 +366,7 @@ public partial class MainViewModel : ObservableObject
             HomeHint = "炸房日期不能填未来";
             return null;
         }
-        return new DateTimeOffset(date, TimeSpan.Zero).ToUnixTimeSeconds();
+        return GameTime.DayStartOf(date).ToUnixTimeSeconds();
     }
 
     private void RefreshAll()

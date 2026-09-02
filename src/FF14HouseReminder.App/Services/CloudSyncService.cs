@@ -160,9 +160,8 @@ public class CloudSyncService : IDisposable
         return pushed;
     }
 
-    /// <summary>Unix 秒 → 北京时间的 yyyy-MM-dd（云端只收日期，按当天 00:00 起算）</summary>
-    private static string BeijingDay(long unixSeconds) =>
-        DateTimeOffset.FromUnixTimeSeconds(unixSeconds).ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd");
+    /// <summary>Unix 秒 → 游戏日的 yyyy-MM-dd（云端只收日期）</summary>
+    private static string BeijingDay(long unixSeconds) => GameTime.DayString(unixSeconds);
 
     // ── 增删改：一律先调 API，调用方随后 PullAsync ──
     public Task<bool> AddWatchAsync(HouseKey k, CancellationToken ct = default) =>

@@ -146,7 +146,7 @@ public partial class HomeViewModel : ObservableObject
             var fRemain = Item.FurnitureDeadline - now;
             var fDays = (int)Math.Floor(fRemain.TotalDays);
             StatusText = fDays >= 0
-                ? $"💥 已炸房，资产回收还剩 {fDays} 天（{Item.FurnitureDeadline.LocalDateTime:MM-dd} 到期）"
+                ? $"💥 已炸房，资产回收还剩 {fDays} 天（{Services.GameTime.Day(Item.FurnitureDeadline)} 到期）"
                 : "💥 已炸房，资产回收已到期！";
             StatusColor = fDays <= 1 ? "#B03030" : fDays <= 5 ? "#B06030" : "#7B5EA7";
             NotifyDemolishState();
@@ -164,7 +164,7 @@ public partial class HomeViewModel : ObservableObject
         var remain = Item.Deadline - now;
         var days = (int)Math.Floor(remain.TotalDays);
         StatusText = days >= 0
-            ? $"剩余 {days} 天（最后进屋 {Item.Deadline.AddDays(-45).LocalDateTime:MM-dd}）"
+            ? $"剩余 {days} 天（最后进屋 {Services.GameTime.Day(Item.Deadline.AddDays(-45))}）"
             : "已超过 45 天未进屋！";
         // 45 天切成 5 段，每段 9 天：蓝 → 青 → 绿 → 黄 → 红。
         // 按钮底色和「剩余 N 天」共用一档，别让同一个数字有两套配色

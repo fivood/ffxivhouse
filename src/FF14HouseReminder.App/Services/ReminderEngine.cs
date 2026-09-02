@@ -209,7 +209,7 @@ public class ReminderEngine
                     Add2(ReminderType.FurnitureDeadline, days, furnitureDeadline.AddDays(-days), furnitureDeadline, homeKey,
                         $"拆除资产回收即将到期：还剩 {days} 天",
                         $"{pos} 可去管理人处回收部分家具庭具 + 购地金的 80%，" +
-                        $"{furnitureDeadline.LocalDateTime:MM-dd HH:mm} 截止，逾期无法回收！");
+                        $"{GameTime.Day(furnitureDeadline)} 截止，逾期无法回收！");
                 }
                 if (now >= furnitureDeadline)
                 {
@@ -234,7 +234,7 @@ public class ReminderEngine
                             ? "今天必须进屋，否则将被自动拆除！"
                             : "记得上线进一次屋（要进入室内才算）。") +
                     "部队房任一成员进屋即可。" +
-                    $"进屋后在「我的房产」里打卡。死线：{deadline.LocalDateTime:MM-dd HH:mm}");
+                    $"进屋后在「我的房产」里打卡。死线：{GameTime.Day(deadline)}");
             }
             // 已过期：立即提醒一次
             if (now >= deadline)

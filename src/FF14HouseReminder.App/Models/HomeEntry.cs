@@ -29,10 +29,8 @@ public class HomeEntry
         $"{GameData.GetServerName(Server)} {GameData.GetAreaName(Area)} {Slot + 1}区 {Id}号";
 
     /// <summary>45 天拆除死线</summary>
-    public DateTimeOffset Deadline =>
-        DateTimeOffset.FromUnixTimeSeconds(LastEnteredAt).AddDays(45);
+    public DateTimeOffset Deadline => Services.GameTime.DayDeadline(LastEnteredAt, 45);
 
     /// <summary>资产回收死线（拆除后 35 天）</summary>
-    public DateTimeOffset FurnitureDeadline =>
-        DateTimeOffset.FromUnixTimeSeconds(DemolishedAt).AddDays(35);
+    public DateTimeOffset FurnitureDeadline => Services.GameTime.DayDeadline(DemolishedAt, 35);
 }
