@@ -186,6 +186,12 @@ public partial class MainViewModel : ObservableObject
 
     public string HomesArrow => ShowHomes ? "▾" : "▸";
 
+    /// <summary>房产登记表单弹层的显隐</summary>
+    [ObservableProperty] private bool _showHomeForm;
+
+    [RelayCommand]
+    private void ToggleHomeForm() => ShowHomeForm = !ShowHomeForm;
+
     // ── 云端同步（填了账号才生效）──────────────────────────────
     // 本地先改，UI 立刻响应、离线也照常用；同一个操作再推到云端。
     // 下一次拉取以云端为准，所以推失败时本地改动会被覆盖回去——这是「云端为准」的代价。
@@ -260,6 +266,7 @@ public partial class MainViewModel : ObservableObject
         _config.Save();
         SyncUp(c => c.AddHomeAsync(key, _config.Config.Homes.First(h => h.Key == key).Label));
         HomeSlotText = HomePlotText = HomeLabelText = "";
+        ShowHomeForm = false; // 登记完收起弹层
         _reminders.Recompute();
         RefreshHomes();
     }

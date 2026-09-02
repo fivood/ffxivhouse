@@ -132,3 +132,12 @@ public class InverseBoolConverter : System.Windows.Data.IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
         => value is bool b && !b;
 }
+
+/// <summary>字符串为空 → Visible（用于 placeholder 提示文字）</summary>
+public class EmptyToVisConverter : System.Windows.Data.IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        => string.IsNullOrEmpty(value as string) ? Visibility.Visible : Visibility.Collapsed;
+    public object ConvertBack(object value, Type targetType, object parameter, System.Globalization.CultureInfo culture)
+        => throw new NotSupportedException();
+}

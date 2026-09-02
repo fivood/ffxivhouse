@@ -19,6 +19,7 @@
         <SolidColorBrush x:Key="TextDim" Color="#8A8A80"/>
         <SolidColorBrush x:Key="Olive" Color="#8B8B5E"/>
         <local:InverseBoolConverter x:Key="InverseBool"/>
+        <local:EmptyToVisConverter x:Key="EmptyToVis"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <!-- 滚动条：4px 直角细条（和网页端一致）。WPF 改不了粗细，只能整个换模板；
@@ -287,8 +288,13 @@
                                         CommandParameter="{Binding}"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,3"
                                             Visibility="{Binding Asking, Converter={StaticResource BoolToVis}}">
-                                    <TextBox Width="96" MaxLength="16" ToolTip="申请号码，可不填，只是做个备忘"
-                                             Text="{Binding EntryNoInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Grid Width="96">
+                                        <TextBox MaxLength="16"
+                                                 Text="{Binding EntryNoInput, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <TextBlock Text="申请号码" Foreground="#ABABA0" FontSize="11"
+                                                   IsHitTestVisible="False" VerticalAlignment="Center" Margin="5,0,0,0"
+                                                   Visibility="{Binding EntryNoInput, Converter={StaticResource EmptyToVis}}"/>
+                                    </Grid>
                                     <Button Content="✔" Style="{StaticResource RetroBtn}" Margin="3,0,0,0" ToolTip="确认"
                                             Command="{Binding DataContext.ConfirmEnteredCommand,
                                                 RelativeSource={RelativeSource AncestorType=ListBox}}"
@@ -318,11 +324,17 @@
             <!-- 我的房产（炸房提醒，可折叠） -->
             <Border Grid.Row="3" Style="{StaticResource Strip}" Cursor="Hand"
                     MouseLeftButtonUp="HomesStrip_Click" ToolTip="点击展开/收起">
-                <TextBlock FontWeight="Bold" Foreground="#3a4a52">
-                    <Run Text="{Binding HomesArrow, Mode=OneWay}"/>
-                    <Run Text=" 我的房产"/>
-                    <Run Text="  45 天未进屋会拆除" FontWeight="Normal" Foreground="#4A5D66" FontSize="11"/>
-                </TextBlock>
+                <DockPanel>
+                    <TextBlock FontWeight="Bold" Foreground="#3a4a52" DockPanel.Dock="Left">
+                        <Run Text="{Binding HomesArrow, Mode=OneWay}"/>
+                        <Run Text=" 我的房产"/>
+                        <Run Text="  45 天未进屋会拆除" FontWeight="Normal" Foreground="#4A5D66" FontSize="11"/>
+                    </TextBlock>
+                    <Button Content="＋" Style="{StaticResource RetroBtn}" FontWeight="Bold"
+                            DockPanel.Dock="Right" VerticalAlignment="Center"
+                            ToolTip="登记我的房产"
+                            Command="{Binding ToggleHomeFormCommand}"/>
+                </DockPanel>
             </Border>
             <Border Grid.Row="4" Background="White" BorderBrush="#ABABA0" BorderThickness="1,0,1,1"
                     Visibility="{Binding ShowHomes, Converter={StaticResource BoolToVis}}">
@@ -392,42 +404,46 @@
                             <StaticResource ResourceKey="RoomyItem"/>
                         </ListBox.ItemContainerStyle>
                     </ListBox>
-                    <StackPanel Margin="8,7" >
-                        <TextBlock FontSize="11" Foreground="#8A8A80"
-                                   Text="登记我的房（登记即起算 45 天；多账号可登记多套，角色名做备注）："/>
-                        <!-- 字段宽度原来各写各的（92/94/42/42/70），排下来很零碎；改成两列等宽网格 -->
-                        <Grid Margin="0,6,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
-                            <ComboBox Grid.Row="0" Grid.Column="0" Margin="0,0,3,4"
-                                      ItemsSource="{Binding Servers}"
-                                      SelectedItem="{Binding HomeServer}" DisplayMemberPath="Name"/>
-                            <ComboBox Grid.Row="0" Grid.Column="1" Margin="3,0,0,4"
-                                      SelectedIndex="{Binding HomeAreaIndex}">
-                                <ComboBoxItem Content="海雾村"/>
-                                <ComboBoxItem Content="薰衣草苗圃"/>
-                                <ComboBoxItem Content="高脚孤丘"/>
-                                <ComboBoxItem Content="白银乡"/>
-                                <ComboBoxItem Content="穹顶皓天"/>
-                            </ComboBox>
-                            <TextBox Grid.Row="1" Grid.Column="0" Margin="0,0,3,4"
-                                     Text="{Binding HomeSlotText}" ToolTip="区号 1-30"/>
-                            <TextBox Grid.Row="1" Grid.Column="1" Margin="3,0,0,4"
-                                     Text="{Binding HomePlotText}" ToolTip="房号 1-60"/>
-                            <TextBox Grid.Row="2" Grid.Column="0" Margin="0,0,3,0"
-                                     Text="{Binding HomeLabelText}" ToolTip="角色名/备注"/>
-                            <Button Grid.Row="2" Grid.Column="1" Margin="3,0,0,0" Content="🏠 登记"
-                                    Style="{StaticResource RetroBtn}" Command="{Binding AddHomeCommand}"/>
-                        </Grid>
-                        <TextBlock Text="{Binding HomeHint}" Foreground="#B03030" FontSize="11" TextWrapping="Wrap"/>
-                    </StackPanel>
+                    <!-- 登记表单收进弹层，平时不占地方 -->
+                    <Border x:Name="HomeFormPopup" Margin="8,4"
+                            Visibility="{Binding ShowHomeForm, Converter={StaticResource BoolToVis}}"
+                            Background="#F2F2EB" BorderBrush="#ABABA0" BorderThickness="1" Padding="8">
+                        <StackPanel>
+                            <TextBlock FontSize="11" Foreground="#8A8A80"
+                                       Text="登记我的房（登记即起算 45 天；角色名做备注）："/>
+                            <Grid Margin="0,6,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <ComboBox Grid.Row="0" Grid.Column="0" Margin="0,0,3,4"
+                                          ItemsSource="{Binding Servers}"
+                                          SelectedItem="{Binding HomeServer}" DisplayMemberPath="Name"/>
+                                <ComboBox Grid.Row="0" Grid.Column="1" Margin="3,0,0,4"
+                                          SelectedIndex="{Binding HomeAreaIndex}">
+                                    <ComboBoxItem Content="海雾村"/>
+                                    <ComboBoxItem Content="薰衣草苗圃"/>
+                                    <ComboBoxItem Content="高脚孤丘"/>
+                                    <ComboBoxItem Content="白银乡"/>
+                                    <ComboBoxItem Content="穹顶皓天"/>
+                                </ComboBox>
+                                <TextBox Grid.Row="1" Grid.Column="0" Margin="0,0,3,4"
+                                         Text="{Binding HomeSlotText}" ToolTip="区号 1-30"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Margin="3,0,0,4"
+                                         Text="{Binding HomePlotText}" ToolTip="房号 1-60"/>
+                                <TextBox Grid.Row="2" Grid.Column="0" Margin="0,0,3,0"
+                                         Text="{Binding HomeLabelText}" ToolTip="角色名/备注"/>
+                                <Button Grid.Row="2" Grid.Column="1" Margin="3,0,0,0" Content="🏠 登记"
+                                        Style="{StaticResource RetroBtn}" Command="{Binding AddHomeCommand}"/>
+                            </Grid>
+                            <TextBlock Text="{Binding HomeHint}" Foreground="#B03030" FontSize="11" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 
