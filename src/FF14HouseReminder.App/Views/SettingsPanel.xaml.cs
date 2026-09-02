@@ -187,6 +187,18 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         Clipboard.SetText(LocalIngestToken);
     }
 
+    /// <summary>开机自启勾选即时生效（不用等保存按钮）</summary>
+    private void AutoStart_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Services.AutoStart.Set(AutoStart);
+            _config.Config.General.AutoStart = AutoStart;
+            _config.Save();
+        }
+        catch (Exception ex) { Logger.Error("设置开机自启失败", ex); }
+    }
+
     /// <summary>通过 getUpdates 列出最近给 Bot 发过消息的会话，供用户选择自己的 Chat ID</summary>
     private async void FetchChatId_Click(object sender, RoutedEventArgs e)
     {

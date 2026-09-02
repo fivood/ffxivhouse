@@ -119,7 +119,8 @@ public static class AutoStart
         {
             var exe = Environment.ProcessPath
                       ?? Path.Combine(AppContext.BaseDirectory, "FF14HouseReminder.exe");
-            key.SetValue(AppName, $"\"{exe}\"");
+            // 开机启动时最小化到托盘，不弹窗糊脸
+            key.SetValue(AppName, $"\"{exe}\" --minimized");
         }
         else
         {

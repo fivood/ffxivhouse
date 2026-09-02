@@ -55,7 +55,7 @@
                     <TextBlock Text="数据轮询间隔（分钟，≥5）：" VerticalAlignment="Center"/>
                     <TextBox Width="50" Text="{Binding PollIntervalMinutes}" Margin="4,2"/>
                 </StackPanel>
-                <CheckBox Content="开机自动启动" IsChecked="{Binding AutoStart}"/>
+                <CheckBox Content="开机自动启动" IsChecked="{Binding AutoStart}" Click="AutoStart_Click"/>
                 <CheckBox Content="启动时检查新版本" IsChecked="{Binding CheckUpdates}"/>
 
                 <TextBlock Text="── 网页 / Bot 账号" Style="{StaticResource H}"/>
