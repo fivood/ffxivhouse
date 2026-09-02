@@ -462,6 +462,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /homes — 我的房产
 
 其他：/name 昵称 · /bark key · /public on|off · /servers · /link · /help
+群里用 /house 叫我（/start 群里每个 Bot 都抢答，我不应）
 
 拉我进群 = 群内炸房监控：群友各自 /myhome 登记，
 到点我在群里点名，谁看到谁顺手提醒本人一声。
@@ -557,7 +558,12 @@ async function handleCommand(
     return;
   }
 
+  // /start 和 /help 是通用命令，群里每个 Bot 都会抢答。
+  // 不点名就不应，改用 /house 这种只有我认的名字
+  if (isGroup && !addressed && (cmd === '/start' || cmd === '/help')) return;
+
   switch (cmd) {
+    case '/house':
     case '/start': {
       // 群里不能挂 Mini App 按钮（Telegram 只允许私聊），而且群是共用一份列表，
       // 定位就是炸房监控：谁登记谁的房，到点在群里点名，方便别人线下捅一下本人
@@ -569,7 +575,8 @@ async function handleCommand(
           + `\n进屋后发 /entered 打卡，/homes 看全群的倒计时。`
           + `\n快拆时我会在群里点名，看到的人顺手提醒本人一声。`
           + `\n不想让群里看到房号：私聊我发 /public off。`
-          + `\n\n群里只做炸房监控。抽房关注和推送设置是个人的，私聊我发 /start。`);
+          + `\n\n群里再叫我用 /house（/start 每个 Bot 都抢答）。`
+          + `\n抽房关注和推送设置是个人的，私聊我发 /start。`);
         return;
       }
       // 只说一句 + 面板按钮，命令表交给 /help，别一上来糊一屏
