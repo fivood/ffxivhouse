@@ -22,11 +22,15 @@
         <local:EmptyToVisConverter x:Key="EmptyToVis"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
-        <!-- 滚动条：4px 直角细条（和网页端一致）。WPF 改不了粗细，只能整个换模板；
-             上下两个 RepeatButton 留着透明的，点轨道翻页照旧能用 -->
+        <!-- 滚动条：3px 直角细条（和网页端一致）。上下两个 RepeatButton 留着透明的，
+             点轨道翻页照旧能用。
+             MinWidth 必须显式清零：默认主题给 ScrollBar 设了 MinWidth = 系统滚动条宽度，
+             而 MinWidth 优先于 MaxWidth，不清掉的话 Width/MaxWidth 都会被顶回 17px。 -->
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="2"/>
+            <Setter Property="Width" Value="3"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MaxWidth" Value="3"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
