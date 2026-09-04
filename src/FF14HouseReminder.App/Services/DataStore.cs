@@ -49,6 +49,24 @@ public class DataStore
                 // 忽略无效条目（如插件测试推送）
                 if (entry.Server <= 0 || entry.Price <= 0 || entry.ID <= 0) continue;
 
+                // 整区扫描的包里没有抽签信息（State/EndTime/Participate 全是 0），
+                // 只有点门牌才有。直接覆盖会把网站那份带阶段的数据顶掉——
+                // 本地永远比远端「新」，于是桌面端反而比网页旧。缺什么就从已知的补回来
+                if (entry.State == 0)
+                {
+                    var known = Get(entry.Key)?.Data;
+                    if (known != null)
+                    {
+                        entry.State = known.State;
+                        entry.EndTime = known.EndTime;
+                        entry.Participate = known.Participate;
+                        entry.Winner = known.Winner;
+                        entry.UpdateTime = known.UpdateTime;
+                        if (entry.FirstSeen <= 0 || (known.FirstSeen > 0 && known.FirstSeen < entry.FirstSeen))
+                            entry.FirstSeen = known.FirstSeen;
+                    }
+                }
+
                 entry.LastSeen = DateTimeOffset.Now.ToUnixTimeSeconds();
                 _local[entry.Key] = new HouseSnapshot
                 {
