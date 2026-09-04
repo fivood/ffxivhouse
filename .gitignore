@@ -19,5 +19,9 @@ node_modules/
 .dev.vars
 worker/worker-configuration.d.ts
 
+## 本机代码索引（工具构建产物）
+.codegraph/
+.zvec-grep/
+
 # 附加功能的源文件：只有本机的完整版构建（-p:FullBuild=true）需要，不进公开仓库
 src/FF14HouseReminder.App/Services/LocalIngestServer.cs

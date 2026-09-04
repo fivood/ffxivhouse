@@ -1518,27 +1518,39 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     return json({ ok: true, mode: item.mode });
   }
 
-  // 插件逛房区时上报整区 60 块地的归属
+  // 插件逛房区时上报整区 60 块地的归属。
+  // 支持一次传多个小区——有插件会在登录时把全服 150 个小区一次刷完，
+  // 一个小区发一次请求的话，同一个 KV 键上的并发读改写会互相覆盖，丢掉大半
   if (path === '/api/ward' && request.method === 'POST') {
-    const body = (await request.json()) as
-      { u?: number; k?: string; server?: number; area?: number; slot?: number; owned?: string };
+    const body = (await request.json()) as {
+      u?: number; k?: string; server?: number;
+      area?: number; slot?: number; owned?: string;
+      wards?: { area?: number; slot?: number; owned?: string }[];
+    };
     if ((await checkAuthBody(env, body)) == null) return json({ error: '未绑定或令牌无效' }, 401);
 
-    const { server, area, slot, owned } = body;
-    if (typeof server !== 'number' || !ALL_SERVERS.some(s => s.id === server)
-      || typeof area !== 'number' || area < 0 || area > 4
-      || typeof slot !== 'number' || slot < 0 || slot > 29
-      || typeof owned !== 'string' || !/^[01]{60}$/.test(owned)) {
-      return json({ error: '参数无效（owned 需要 60 位 0/1）' }, 400);
+    const server = body.server;
+    if (typeof server !== 'number' || !ALL_SERVERS.some(s => s.id === server)) {
+      return json({ error: 'server 参数无效' }, 400);
     }
 
+    const incoming = body.wards ?? [{ area: body.area, slot: body.slot, owned: body.owned }];
     const nowSec = Math.floor(Date.now() / 1000);
     const wards = await getWards(env, server);
-    wards[wardKey(area, slot)] = [nowSec, owned];
+    let count = 0;
+    for (const w of incoming.slice(0, 200)) {
+      if (typeof w.area !== 'number' || w.area < 0 || w.area > 4) continue;
+      if (typeof w.slot !== 'number' || w.slot < 0 || w.slot > 29) continue;
+      if (typeof w.owned !== 'string' || !/^[01]{60}$/.test(w.owned)) continue;
+      wards[wardKey(w.area, w.slot)] = [nowSec, w.owned];
+      count++;
+    }
+    if (count === 0) return json({ error: '参数无效（owned 需要 60 位 0/1）' }, 400);
+
     // 三十天没人再逛过的就别留着了，房区变化很快
     for (const [k, v] of Object.entries(wards)) if (nowSec - v[0] > 30 * 86400) delete wards[k];
     await env.KV.put(`wards:${server}`, JSON.stringify(wards), { expirationTtl: 60 * 86400 });
-    return json({ ok: true });
+    return json({ ok: true, count });
   }
 
   // 房区空置情况（网页的房区图用；没人逛过的房区就没有，前端退回按在售列表推测）
