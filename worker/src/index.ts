@@ -371,7 +371,27 @@ async function getSub(env: Env, id: string | number): Promise<UserSub> {
 }
 
 async function saveSub(env: Env, sub: UserSub): Promise<void> {
-  await env.KV.put(`sub:${sub.id ?? sub.chatId}`, JSON.stringify(sub));
+  const key = `sub:${sub.id ?? sub.chatId}`;
+  await env.KV.put(key, JSON.stringify(sub));
+  // 用户改了设置：标成「立即到期」，下一轮 cron 就重算它（刚加的房可能马上要补发提醒）
+  const sched = await getSched(env);
+  if (sched && sched[key] !== 0) {
+    sched[key] = 0;
+    await env.KV.put(SCHED_KEY, JSON.stringify(sched));
+  }
+}
+
+/**
+ * 提醒排程索引：{ "sub:xxx": 下次需要检查的时间 }。
+ * cron 平时只读这一个 key，没人到期就直接收工，不再每轮 list + 挨个读订阅。
+ * ponytail: 单 key 会被并发写覆盖（KV 最终一致），靠整点全量扫描兜底，最坏晚 1 小时；
+ * 订阅量大到这也不够时换 Durable Object alarm。
+ */
+const SCHED_KEY = 'sched';
+type Sched = Record<string, number>;
+
+async function getSched(env: Env): Promise<Sched | null> {
+  return env.KV.get<Sched>(SCHED_KEY, 'json');
 }
 
 // ═══════════════ Web 绑定令牌（HMAC，免账号体系） ═══════════════
@@ -1084,21 +1104,38 @@ interface DueReminder {
   homeRef?: { server: number; area: number; slot: number; id: number };
 }
 
-async function runReminders(env: Env): Promise<void> {
+/** 空闲时最久多久复查一次（整点全量扫描也会兜底） */
+const IDLE_RECHECK_SEC = 6 * 3600;
+
+async function runReminders(env: Env, fullScan: boolean): Promise<void> {
   const nowSec = Math.floor(Date.now() / 1000);
   // 房主的「群内是否公开」设置存在他自己的订阅里，一轮跑下来只查一次
   const publicCache = new Map<number, boolean>();
-  const subKeys = await env.KV.list({ prefix: 'sub:' });
-  if (subKeys.keys.length === 0) return;
+
+  // 平时只读排程索引，挑出到期的；整点或索引丢了才 list 全量（顺便补上漏进索引的新订阅）
+  const sched = fullScan ? null : await getSched(env);
+  let dueKeys: string[];
+  if (sched) {
+    dueKeys = Object.keys(sched).filter(k => sched[k] <= nowSec);
+    if (dueKeys.length === 0) return;
+  } else {
+    const list = await env.KV.list({ prefix: 'sub:' });
+    dueKeys = list.keys.map(k => k.name);
+  }
+  // 本轮算出的下次检查时间；null = 订阅已不存在
+  const updates: Record<string, number | null> = {};
 
   // 先收集需要哪些服务器的数据
   const subs: UserSub[] = [];
-  for (const key of subKeys.keys) {
-    const sub = await env.KV.get<UserSub>(key.name, 'json');
-    // 有关注或有房产的用户才参与提醒
-    if (sub && (sub.items.length > 0 || (sub.homes?.length ?? 0) > 0)) subs.push(sub);
+  for (const key of dueKeys) {
+    const sub = await env.KV.get<UserSub>(key, 'json');
+    if (!sub) { updates[key] = null; continue; }   // 已删除（合并账号等）
+    sub.id ??= key.slice(4);
+    // 有关注或有房产的用户才参与提醒；其余的等它改设置（saveSub 会标到期）
+    if (sub.items.length > 0 || (sub.homes?.length ?? 0) > 0) subs.push(sub);
+    else updates[key] = nowSec + 30 * 86400;
   }
-  if (subs.length === 0) return;
+  if (subs.length === 0) { await writeSched(env, updates, !sched); return; }
 
   const serverIds = [...new Set(subs.flatMap(s => s.items.map(i => i.server)))];
 
@@ -1115,6 +1152,9 @@ async function runReminders(env: Env): Promise<void> {
   for (const sub of subs) {
     let dirty = false;
     const due: DueReminder[] = [];
+    // 这个订阅下一个要发的提醒时间，算出来写回排程，到点前 cron 不再碰它
+    let next = nowSec + IDLE_RECHECK_SEC;
+    const wake = (t: number) => { if (t > nowSec && t < next) next = t; };
 
     // ── 炸房提醒（45 天未进房 / 拆除后资产回收 35 天）──
     for (const h of sub.homes ?? []) {
@@ -1133,6 +1173,7 @@ async function runReminders(env: Env): Promise<void> {
           const upper = i + 1 < DEMOLITION_LEAD_DAYS.length
             ? fDeadline - DEMOLITION_LEAD_DAYS[i + 1] * 86400
             : fDeadline;
+          wake(fireSec);
           if (nowSec < fireSec || nowSec >= upper) continue;
           const key = `furn|${fDeadline}|${days}`;
           if (h.fired.includes(key)) continue;
@@ -1146,6 +1187,7 @@ async function runReminders(env: Env): Promise<void> {
             homeRef: { server: h.server, area: h.area, slot: h.slot, id: h.id },
           });
         }
+        wake(fDeadline);
         if (nowSec >= fDeadline && !h.fired.includes(`furn|${fDeadline}|over`)) {
           h.fired.push(`furn|${fDeadline}|over`);
           dirty = true;
@@ -1169,6 +1211,7 @@ async function runReminders(env: Env): Promise<void> {
         const upper = i + 1 < DEMOLITION_LEAD_DAYS.length
           ? deadlineSec - DEMOLITION_LEAD_DAYS[i + 1] * 86400
           : deadlineSec;
+        wake(fireSec);
         if (nowSec < fireSec || nowSec >= upper) continue;
         const key = `demo|${deadlineSec}|${days}`;
         if (h.fired.includes(key)) continue;
@@ -1191,6 +1234,7 @@ async function runReminders(env: Env): Promise<void> {
       }
 
       // 已过期（只提醒一次）
+      wake(deadlineSec);
       if (nowSec >= deadlineSec && !h.fired.includes(`demo|${deadlineSec}|over`)) {
         h.fired.push(`demo|${deadlineSec}|over`);
         dirty = true;
@@ -1217,7 +1261,9 @@ async function runReminders(env: Env): Promise<void> {
           w.depositDeadline = undefined;   // 已到期，别再留着
           dirty = true;
         } else if (notify.deposit) {
+          wake(w.depositDeadline);   // 到期那一刻清掉它
           for (const h of sub.leadHours) {
+            wake(w.depositDeadline - h * 3600);
             if (nowSec < w.depositDeadline - h * 3600) continue;
             const key = `${w.server}:${w.area}:${w.slot}:${w.id}|5|${w.depositDeadline}|${h}`;
             if (w.fired.includes(key)) continue;
@@ -1239,6 +1285,7 @@ async function runReminders(env: Env): Promise<void> {
       if (!house) continue;
 
       const phase = getPhase(house, nowSec);
+      wake(phase.end);   // 换阶段时重算
       const suffix = (phase.estimated ? '\n（推测数据，建议登录游戏复核）' : '')
         + (nowSec - house.LastSeen > 7200 ? '\n⚠ 数据已较久未更新，请以游戏内实际为准' : '');
 
@@ -1249,7 +1296,7 @@ async function runReminders(env: Env): Promise<void> {
         let fire = fireAtSec;
         let leadKey: string = `${leadH ?? 'x'}`;
         if (fire <= nowSec && anchor > nowSec) { fire = nowSec; leadKey = 'now'; }
-        if (fire > nowSec) return; // 未到时间
+        if (fire > nowSec) { wake(fire); return; } // 未到时间
         const key = `${w.server}:${w.area}:${w.slot}:${w.id}|${type}|${anchor}|${leadKey}`;
         if (w.fired.includes(key)) return;
         w.fired.push(key);
@@ -1315,10 +1362,24 @@ async function runReminders(env: Env): Promise<void> {
         await pushToSub(env, sub, r.title, r.body);
       }
     }
-    if (dirty) await saveSub(env, sub);
+    // 直接写，不走 saveSub：那边会把自己标成「立即到期」
+    if (dirty) await env.KV.put(`sub:${sub.id}`, JSON.stringify(sub));
+    updates[`sub:${sub.id}`] = next;
   }
+  await writeSched(env, updates, !sched);
 
   console.log(`提醒检查完成：${subs.length} 个订阅，${serverIds.length} 个服务器`);
+}
+
+/** 写回排程：全量扫描时整张重建（清掉残留），否则写前重读、只改本轮碰过的，尽量不盖掉 saveSub 刚标的 */
+async function writeSched(env: Env, updates: Record<string, number | null>, rebuild: boolean): Promise<void> {
+  const sched: Sched = rebuild ? {} : (await getSched(env)) ?? {};
+  for (const [k, v] of Object.entries(updates)) {
+    // 本轮处理期间用户又改了设置（被标成 0），保留 0 让下一轮再算
+    if (v === null) delete sched[k];
+    else if (sched[k] !== 0) sched[k] = v;
+  }
+  await env.KV.put(SCHED_KEY, JSON.stringify(sched));
 }
 
 /** 「抽了」的回执：房子信息 + 申请号码（填了才有）+ 本轮截止时间 */
@@ -1902,6 +1963,8 @@ export default {
 
   /** Cron：每 2 分钟检查提醒 */
   async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(runReminders(env));
+    // 整点全量扫一次：兜底并发写丢失、新订阅、售楼数据变化；其余时间只看排程
+    const fullScan = new Date(controller.scheduledTime).getUTCMinutes() === 0;
+    ctx.waitUntil(runReminders(env, fullScan));
   },
 } satisfies ExportedHandler<Env>;
