@@ -124,6 +124,7 @@ public class CloudSyncService : IDisposable
             };
             if (oldHomes.TryGetValue(item.Key, out var old))
             {
+                item.RisingStonesOwner = old.RisingStonesOwner;   // 只存本地，云端没有这个字段
                 if (old.LastEnteredAt != item.LastEnteredAt || old.DemolishedAt != item.DemolishedAt
                     || old.Shared != item.Shared)
                     changed = true;
