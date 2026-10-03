@@ -797,7 +797,7 @@ function renderHomes() {
     const enterBtn = h.demolishedAt > 0 ? '' :
       `<button class="icon-btn btn-enter ${h.lastEnteredAt > 0 ? 'lit d' + enterStage(h.remainDays) : ''}" title="打卡，重置倒计时" onclick="enteredHome('${key}')">${ico('check')}已进屋</button>`;
     return `<div class="item" onmouseenter="hoverPlot('${key}')">
-      <div class="row"><span class="title">${h.serverName} ${h.areaName} ${h.slotNo}区 ${h.id}号 <span class="meta">${h.label}</span></span>${enterBtn}</div>
+      <div class="row"><span class="title">${h.serverName} ${h.areaName} ${h.slotNo}区 ${h.id}号 <span class="meta">${h.label}${h.shared ? ' · 部队房' : ''}</span></span>${enterBtn}</div>
       <div>${status}</div>
       <div class="home-actions">
         ${h.demolishedAt > 0
@@ -807,6 +807,7 @@ function renderHomes() {
           : `<input type="date" id="bd-${key}" max="${todayStr()}" title="补签或炸房日期，留空按今天">
         <button class="icon-btn" title="按所选日期补签" aria-label="补签" onclick="backfillHome('${key}')">${ico('calendar')}<span class="lbl">补签</span></button>
         <button class="icon-btn btn-danger" title="标记炸房，开始 35 天资产回收倒计时" aria-label="我房炸了" onclick="demolishHome('${key}')">${ico('zap')}<span class="lbl">我房炸了</span></button>`}
+        <button class="icon-btn" title="部队房：别的账号登记了同一套房并也设了部队房，谁打卡都一起重置" aria-label="${h.shared ? '取消部队房' : '设为部队房'}" onclick="toggleShared('${key}', ${!h.shared})">${ico('flag')}<span class="lbl">${h.shared ? '取消部队房' : '设为部队房'}</span></button>
         <button class="icon-btn" title="移除这套房产" aria-label="移除这套房产" onclick="removeHome('${key}')">${ico('trash')}</button>
       </div>
     </div>`;
@@ -838,6 +839,11 @@ async function removeHome(key) {
 
 async function enteredHome(key) {
   await submit('POST', '/api/entered', parseKey(key), '已打卡，倒计时重置为 45 天');
+}
+
+async function toggleShared(key, on) {
+  await submit('POST', '/api/home', { ...parseKey(key), shared: on },
+    on ? '已设为部队房，其他成员打卡会同步过来' : '已改回个人房');
 }
 
 async function backfillHome(key) {

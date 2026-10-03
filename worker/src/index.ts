@@ -101,6 +101,8 @@ interface HomeEntry {
   lastEnteredAt: number;
   /** 炸房（被拆除）时间（unix 秒），0=未炸房。拆除后 35 天内可回收资产 */
   demolishedAt?: number;
+  /** 部队房：别的账号对同一块地打卡，这条也跟着重置（见 shareEntered） */
+  shared?: boolean;
   fired: string[];
 }
 
@@ -394,6 +396,52 @@ async function getSched(env: Env): Promise<Sched | null> {
   return env.KV.get<Sched>(SCHED_KEY, 'json');
 }
 
+// ═══════════════ 部队房共享打卡 ═══════════════
+
+type Plot = { server: number; area: number; slot: number; id: number };
+const samePlot = (a: Plot, b: Plot) => a.server === b.server && a.area === b.area && a.slot === b.slot && a.id === b.id;
+/** 索引：一块地 → 勾了「部队房」的账号 id。取消勾选、删房都不用动它，读到时顺手清掉 */
+const sharedKey = (p: Plot) => `fc:${p.server}:${p.area}:${p.slot}:${p.id}`;
+
+/** 勾了「部队房」的账号（读的时候核对一遍，失效的清出索引）。ponytail: 单 key 并发勾选会互相覆盖，撞上了重勾一次就好 */
+async function sharedHolders(env: Env, p: Plot): Promise<{ sub: UserSub; h: HomeEntry }[]> {
+  const ids = (await env.KV.get<string[]>(sharedKey(p), 'json')) ?? [];
+  const out: { sub: UserSub; h: HomeEntry }[] = [];
+  for (const id of ids) {
+    const sub = await env.KV.get<UserSub>(`sub:${id}`, 'json');
+    const h = sub?.homes?.find(x => samePlot(x, p) && x.shared);
+    if (!sub || !h) continue;
+    sub.id = id;
+    out.push({ sub, h });
+  }
+  if (out.length < ids.length) await env.KV.put(sharedKey(p), JSON.stringify(out.map(x => x.sub.id)));
+  return out;
+}
+
+/**
+ * 游戏里部队房任一成员进屋都算，所以谁打了卡，别的账号里同一块地、勾了「部队房」的那条也跟着重置。
+ * 只同步给勾了的人：个人房只认房主本人进屋，访客打卡不能替房主续命。
+ */
+async function shareEntered(env: Env, fromId: string, p: Plot, ts: number): Promise<void> {
+  for (const { sub, h } of await sharedHolders(env, p)) {
+    if (sub.id === fromId || (h.demolishedAt ?? 0) > 0 || h.lastEnteredAt >= ts) continue;
+    h.lastEnteredAt = ts;
+    h.fired = [];
+    await saveSub(env, sub);
+  }
+}
+
+/** 勾选/取消「部队房」。勾上时顺带取其他成员里最近的一次打卡。调用方负责 saveSub */
+async function setShared(env: Env, subId: string, h: HomeEntry, on: boolean): Promise<void> {
+  if (!on) { delete h.shared; return; }
+  h.shared = true;
+  const others = await sharedHolders(env, h);
+  const ids = others.map(x => x.sub.id);
+  if (!ids.includes(subId)) await env.KV.put(sharedKey(h), JSON.stringify([...ids, subId]));
+  const latest = Math.max(0, ...others.map(x => x.h.lastEnteredAt));
+  if (latest > h.lastEnteredAt) { h.lastEnteredAt = latest; h.fired = []; }
+}
+
 // ═══════════════ Web 绑定令牌（HMAC，免账号体系） ═══════════════
 
 const WEB_BASE = 'https://ff14.70015.net';
@@ -501,6 +549,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /myhome 萌芽池 白银乡 14 43 阿光 — 登记房产
 /entered [序号] [日期] — 进屋打卡 / 补签（天数按日本时间算，00:00 跨一天）
 /demolished [序号] — 标记已拆除（35 天资产回收倒计时）
+/fc [序号] — 设为/取消部队房（成员间共享打卡）
 /homes — 我的房产
 
 其他：/name 昵称 · /bark key · /public on|off · /servers · /link · /help
@@ -508,7 +557,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 
 拉我进群 = 群内炸房监控：群友各自 /myhome 登记，
 到点我在群里点名，谁看到谁顺手提醒本人一声。
-群里只有 /myhome /entered /demolished /homes 四条；
+群里只有 /myhome /entered /demolished /fc /homes 五条；
 序号只认你自己那几套（有两套就是 1 和 2，不用去数别人的）；
 抽房关注和推送设置是个人的，只在私聊有效。
 不想让群里看到具体房号：私聊发 /public off，群里就只写
@@ -556,14 +605,16 @@ async function handleCallback(
       await tgAnswerCallback(env, callbackId, '未找到该房产（可能已移除）');
       return;
     }
-    // 群里谁都能点这个按钮，但只有房主自己知道进没进屋，替别人点等于把倒计时清错
-    if (isGroup && home.ownerId && home.ownerId !== from?.id) {
+    // 群里谁都能点这个按钮，但只有房主自己知道进没进屋，替别人点等于把倒计时清错。
+    // 部队房例外：任一成员进屋都算，群里谁进了谁点
+    if (isGroup && home.ownerId && home.ownerId !== from?.id && !home.shared) {
       await tgAnswerCallback(env, callbackId, `这是 ${home.ownerName ?? '别人'} 的房，只能由本人打卡`);
       return;
     }
     home.lastEnteredAt = Math.floor(Date.now() / 1000);
     home.fired = [];
     await saveSub(env, sub);
+    await shareEntered(env, sub.id!, home, home.lastEnteredAt);
     await tgAnswerCallback(env, callbackId, `✅ 已打卡！${home.label} 倒计时重置为 ${DEMOLITION_DAYS} 天`);
     return;
   }
@@ -1005,12 +1056,36 @@ ${r.msg}`);
       homes[idx].lastEnteredAt = dateSec > 0 ? dateSec : nowSec;
       homes[idx].fired = [];
       await saveSub(env, sub);
+      await shareEntered(env, sub.id!, homes[idx], homes[idx].lastEnteredAt);
       const h = homes[idx];
       const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
       const when = dateSec > 0 ? `（补签至 ${fmtDay(dateSec)}）` : '';
       await tgSend(env, chatId,
         `✅ 已打卡${when}：${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）\n` +
         `炸房倒计时重置为 ${DEMOLITION_DAYS} 天（到 ${fmtDay(dayDeadline(homes[idx].lastEnteredAt, DEMOLITION_DAYS))} 为止）。`);
+      return;
+    }
+
+    case '/fc': {
+      const sub = await getSub(env, chatId);
+      const homes = mineOnly(sub.homes ?? [], isGroup, sender);
+      if (homes.length === 0) {
+        await tgSend(env, chatId, '还没有登记房产，用 /myhome 登记。');
+        return;
+      }
+      const idx = homes.length === 1 ? 0 : parseInt(args[0] ?? '', 10) - 1;
+      if (!(idx >= 0 && idx < homes.length)) {
+        const list = homes.map((h, i) => `${i + 1}. ${h.label}${h.shared ? '（部队房）' : ''}`).join('\n');
+        await tgSend(env, chatId, `请指定序号：/fc 序号\n${list}`);
+        return;
+      }
+      const h = homes[idx];
+      await setShared(env, sub.id!, h, !h.shared);
+      await saveSub(env, sub);
+      await tgSend(env, chatId, h.shared
+        ? `已设「${h.label}」为部队房：别人登记了同一套房、也设了部队房的话，谁打卡都一起重置。`
+          + (isGroup ? '\n群里提醒的打卡按钮，任一群友都能点。' : '')
+        : `「${h.label}」已改回个人房，只认自己打卡。`);
       return;
     }
 
@@ -1517,7 +1592,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
       homes: (sub.homes ?? []).map(h => ({
         server: h.server, serverName: ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`,
         area: h.area, areaName: AREA_NAMES[h.area], slot: h.slot, slotNo: h.slot + 1,
-        id: h.id, label: h.label,
+        id: h.id, label: h.label, shared: !!h.shared,
         lastEnteredAt: h.lastEnteredAt,
         demolishedAt: h.demolishedAt ?? 0,
         deadline: h.lastEnteredAt > 0 ? dayDeadline(h.lastEnteredAt, DEMOLITION_DAYS) : 0,
@@ -1702,7 +1777,12 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     for (const w of src.items) if (!have.has(keyOf(w))) { dst.items.push(w); merged++; }
     const homes = dst.homes ?? [];
     const haveHome = new Set(homes.map(keyOf));
-    for (const h of src.homes ?? []) if (!haveHome.has(keyOf(h))) { homes.push(h); merged++; }
+    for (const h of src.homes ?? []) {
+      if (haveHome.has(keyOf(h))) continue;
+      if (h.shared) await setShared(env, to, h, true);   // 索引里记的是旧账号，换成新的
+      homes.push(h);
+      merged++;
+    }
     dst.homes = homes;
     dst.barkKey ??= src.barkKey;
     dst.wxpusherSpt ??= src.wxpusherSpt;
@@ -1765,7 +1845,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
   }
 
   if (path === '/api/home' && request.method === 'POST') {
-    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number; label?: string };
+    const body = (await request.json()) as { u?: number; k?: string; server?: number; area?: number; slot?: number; id?: number; label?: string; shared?: boolean };
     const chatId = await checkAuthBody(env, body);
     if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
     const { server, area, slot, id } = body;
@@ -1778,8 +1858,9 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const existing = sub.homes.find(h => h.server === server && h.area === area && h.slot === slot && h.id === id);
     if (existing) {
       if (body.label) existing.label = body.label.slice(0, 16);
+      if (typeof body.shared === 'boolean') await setShared(env, chatId, existing, body.shared);
       await saveSub(env, sub);
-      return json({ ok: true, message: '已登记过，备注已更新' });
+      return json({ ok: true, message: '已登记过，已更新' });
     }
     sub.homes.push({
       server, area, slot, id,
@@ -1819,6 +1900,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     home.lastEnteredAt = day ? day.ts : Math.floor(Date.now() / 1000);
     home.fired = [];
     await saveSub(env, sub);
+    await shareEntered(env, chatId, home, home.lastEnteredAt);
     return json({ ok: true });
   }
 

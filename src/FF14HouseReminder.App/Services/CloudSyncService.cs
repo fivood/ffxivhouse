@@ -69,6 +69,7 @@ public class CloudSyncService : IDisposable
         public string Label { get; set; } = "";
         public long LastEnteredAt { get; set; }
         public long DemolishedAt { get; set; }
+        public bool Shared { get; set; }
     }
 
     private class CloudState
@@ -119,10 +120,12 @@ public class CloudSyncService : IDisposable
             {
                 Server = (int)h.Server, Area = h.Area, Slot = h.Slot, Id = h.Id,
                 Label = h.Label, LastEnteredAt = h.LastEnteredAt, DemolishedAt = h.DemolishedAt,
+                Shared = h.Shared,
             };
             if (oldHomes.TryGetValue(item.Key, out var old))
             {
-                if (old.LastEnteredAt != item.LastEnteredAt || old.DemolishedAt != item.DemolishedAt)
+                if (old.LastEnteredAt != item.LastEnteredAt || old.DemolishedAt != item.DemolishedAt
+                    || old.Shared != item.Shared)
                     changed = true;
             }
             else changed = true;
@@ -156,6 +159,7 @@ public class CloudSyncService : IDisposable
             // 云端登记时把进屋时间记成「现在」，得把本地的真实日期补回去，否则 45 天倒计时会算错
             if (h.LastEnteredAt > 0) await EnteredAsync(h.Key, BeijingDay(h.LastEnteredAt), ct);
             if (h.DemolishedAt > 0) await DemolishedAsync(h.Key, BeijingDay(h.DemolishedAt), ct);
+            if (h.Shared) await SetSharedAsync(h.Key, true, ct);
         }
         return pushed;
     }
@@ -180,6 +184,14 @@ public class CloudSyncService : IDisposable
 
     public Task<bool> AddHomeAsync(HouseKey k, string label, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Post, "/api/home", Body(k, ("label", label)), ct);
+
+    /// <summary>设为/取消部队房（云端那条已登记过，只改标记）</summary>
+    public Task<bool> SetSharedAsync(HouseKey k, bool on, CancellationToken ct = default)
+    {
+        var body = Body(k);
+        body["shared"] = on;   // 布尔，服务端只认 true/false
+        return SendAsync(HttpMethod.Post, "/api/home", body, ct);
+    }
 
     public Task<bool> RemoveHomeAsync(HouseKey k, CancellationToken ct = default) =>
         SendAsync(HttpMethod.Delete, "/api/home", Body(k), ct);

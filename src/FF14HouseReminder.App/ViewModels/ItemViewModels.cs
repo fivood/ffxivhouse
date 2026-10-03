@@ -131,7 +131,11 @@ public partial class HomeViewModel : ObservableObject
     }
 
     public string PositionText => Item.PositionText;
-    public string Label => Item.Label;
+    public string Label => Item.Shared ? $"{Item.Label} · 部队房" : Item.Label;
+    public bool Shared => Item.Shared;
+    public string SharedTip => Item.Shared
+        ? "部队房：其他成员打卡会同步过来。点击改回个人房"
+        : "设为部队房：别的账号登记了同一套房、也设了部队房的话，谁打卡都一起重置（需链接云端）";
     /// <summary>炸房按钮文案（再点一次取消）</summary>
     // 操作行要挤进一行，次要按钮只留图标，说明交给 ToolTip
     public string DemolishText => Item.DemolishedAt > 0 ? "↺" : "💥";

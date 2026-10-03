@@ -116,6 +116,7 @@ public static class RisingStonesSync
         home.Slot = plot.Slot;
         home.Id = plot.Id;
         home.RisingStonesOwner = ch.Name;
+        home.Shared = false;   // 换了一套房，是不是部队房得重新认
         await cloud.AddHomeAsync(home.Key, home.Label, ct);
         if (home.LastEnteredAt > 0)
             await cloud.EnteredAsync(home.Key, BeijingDay(home.LastEnteredAt), ct);

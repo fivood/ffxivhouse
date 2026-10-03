@@ -294,6 +294,22 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ToggleSharedHome(HomeViewModel item)
+    {
+        // 成员之间的打卡全靠云端互通，没链接时勾了也白勾
+        if (!App.Cloud.Linked)
+        {
+            HomeHint = "部队房共享打卡要先在设置里链接云端账号";
+            return;
+        }
+        HomeHint = "";
+        item.Item.Shared = !item.Item.Shared;
+        _config.Save();
+        SyncUp(c => c.SetSharedAsync(item.Item.Key, item.Item.Shared));   // 勾上时云端会顺带取成员最近一次打卡，拉回来就有
+        RefreshHomes();
+    }
+
+    [RelayCommand]
     private void BackfillHome(HomeViewModel item)
     {
         if (item.BackfillDate == null)

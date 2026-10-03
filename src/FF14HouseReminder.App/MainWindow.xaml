@@ -400,6 +400,21 @@
                                                 Command="{Binding DataContext.DemolishHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                 CommandParameter="{Binding}"/>
+                                        <Button Content="🚩" Margin="0,0,4,0" ToolTip="{Binding SharedTip}"
+                                                Command="{Binding DataContext.ToggleSharedHomeCommand,
+                                                    RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                CommandParameter="{Binding}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource RetroBtn}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Shared}" Value="True">
+                                                            <Setter Property="Background" Value="#8B8B5E"/>
+                                                            <Setter Property="BorderBrush" Value="#55554A"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
                                         <Button Content="🗑" Style="{StaticResource RetroBtn}" Margin="0" ToolTip="移除这套房产"
                                                 Command="{Binding DataContext.RemoveHomeCommand,
                                                     RelativeSource={RelativeSource AncestorType=ListBox}}"
