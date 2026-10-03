@@ -85,6 +85,10 @@ POST /api/mode    { "u": "...", "k": "...", "server": 1060, "area": 1, "slot": 2
 `/api/watch` 重复调用不会重复添加；`/api/mode` 带 `mode` 就是明确指定（0=计划抽 1=已报名），
 重复调用结果一样，不带 `mode` 才是切换。标记成已报名会往你绑的渠道回执一条，含房子信息和申请号码。
 
+**卫月插件仓库** —— `GET /plugin/repo.json`（卫月设置 →「自定义插件仓库」填这个地址），
+插件包 `/plugin/latest.zip`、图标 `/plugin/icon.png`。插件不在本仓库，三样东西由插件那边的
+`publish.ps1` 直接写进 KV（`plugin:manifest` / `plugin:zip` / `plugin:icon`），没发布过时 repo.json 返回 `[]`。
+
 ## 本地开发
 
 ```powershell

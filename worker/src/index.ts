@@ -1533,6 +1533,7 @@ async function enrichWatch(env: Env, sub: UserSub): Promise<unknown[]> {
       server: w.server, serverName, area: w.area, areaName: AREA_NAMES[w.area],
       slot: w.slot, slotNo: w.slot + 1, id: w.id,
       size: SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?', mode: w.mode, entryNo: w.entryNo ?? '',
+      depositDeadline: w.depositDeadline ?? 0,   // 房子下架后也还要提醒，插件游戏内提醒用
     };
     try {
       const sales = await getSales(env, w.server);
@@ -2064,6 +2065,29 @@ export default {
       } catch {
         return new Response('bad gateway', { status: 502 });
       }
+    }
+
+    // 卫月插件仓库：卫月设置 →「自定义插件仓库」加 /plugin/repo.json，插件就会自动更新。
+    // 插件不进公开仓库，包、清单、图标由 HouseWatcher 的 publish.ps1 直接传进 KV
+    if (url.pathname.startsWith('/plugin/') && request.method === 'GET') {
+      const file = url.pathname.slice('/plugin/'.length);
+      if (file === 'repo.json') {
+        const m = await env.KV.get<Record<string, unknown>>('plugin:manifest', 'json');
+        if (!m) return json([]);
+        // 带上版本号，免得哪一层缓存把旧包当新包发出去
+        const zip = `${WEB_BASE}/plugin/latest.zip?v=${encodeURIComponent(String(m.AssemblyVersion))}`;
+        return json([{
+          ...m,
+          IconUrl: `${WEB_BASE}/plugin/icon.png`,
+          DownloadLinkInstall: zip, DownloadLinkUpdate: zip, DownloadLinkTesting: zip,
+        }]);
+      }
+      const key = file === 'latest.zip' ? 'plugin:zip' : file === 'icon.png' ? 'plugin:icon' : null;
+      const buf = key ? await env.KV.get(key, 'arrayBuffer') : null;
+      if (!buf) return new Response('not found', { status: 404 });
+      return new Response(buf, {
+        headers: { 'Content-Type': key === 'plugin:zip' ? 'application/zip' : 'image/png', 'Cache-Control': 'no-cache' },
+      });
     }
 
     if (url.pathname === '/webhook' && request.method === 'POST') {
