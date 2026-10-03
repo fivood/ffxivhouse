@@ -66,6 +66,12 @@ public class ReminderSettings
     /// <summary>下轮申请期开始提醒</summary>
     public bool NotifyNextEntryStart { get; set; } = true;
 
+    /// <summary>炸房提醒（45 天未进屋倒计时 + 拆除后 35 天资产回收）</summary>
+    public bool NotifyDemolition { get; set; } = true;
+
+    /// <summary>炸房 / 资产回收提醒提前量（天），剩这几天时各提醒一次；15 = 第 30 天，刚进入拆除准备</summary>
+    public List<int> DemolitionLeadDays { get; set; } = [15, 10, 5, 1];
+
     /// <summary>数据超过该小时数未更新时，提醒文案附带滞后警告</summary>
     public int StaleHoursWarning { get; set; } = 2;
 }

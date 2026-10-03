@@ -110,6 +110,17 @@ interface HomeEntry {
 const DEMOLITION_DAYS = 45;
 /** 炸房提醒提前量（天） */
 const DEMOLITION_LEAD_DAYS = [15, 10, 5, 1];   // 15 = 第 30 天，游戏里刚进入「自动拆除准备」的节点
+/** 炸房 / 资产回收提醒可选的档（天）；资产回收期只有 35 天，所以最多提前 30 天 */
+const DEMO_LEAD_PRESETS = [30, 20, 15, 10, 7, 5, 3, 1];
+const MAX_DEMO_LEADS = 6;
+/** 去重、排序、校验；不合法返回错误文案 */
+function cleanDemoLeads(xs: unknown[]): number[] | string {
+  const valid = xs.filter((d): d is number => Number.isInteger(d) && (d as number) >= 1 && (d as number) <= 30);
+  if (valid.length === 0 || valid.length !== xs.length) return '炸房提前量填 1-30 天的整数';
+  const days = [...new Set(valid)].sort((a, b) => b - a);
+  if (days.length > MAX_DEMO_LEADS) return `炸房提前量最多选 ${MAX_DEMO_LEADS} 个`;
+  return days;
+}
 /** 抽签金返还期限：公示期结束后 90 天（不论中标与否，都要点门牌确认才返还） */
 const DEPOSIT_DAYS = 90;
 /** 拆除后资产回收期限（天）：家具庭具 + 购地金币的 80% */
@@ -140,8 +151,12 @@ interface NotifyFlags {
   claim: boolean;    // 公示期截止前（中签确认归属死线）
   deposit: boolean;  // 抽签金返还死线（公示期结束后 90 天）
   next: boolean;     // 下轮申请期开始
+  demolition: boolean; // 炸房倒计时 + 拆除后资产回收
 }
-const NOTIFY_ALL: NotifyFlags = { entry: true, results: true, claim: true, deposit: true, next: true };
+const NOTIFY_ALL: NotifyFlags = { entry: true, results: true, claim: true, deposit: true, next: true, demolition: true };
+/** 老订阅存的开关缺后来加的项，缺的按开 */
+const flagsOf = (sub: UserSub): NotifyFlags => ({ ...NOTIFY_ALL, ...sub.notify });
+const demoLeadsOf = (sub: UserSub): number[] => sub.demoLeadDays ?? DEMOLITION_LEAD_DAYS;
 
 interface UserSub {
   /** 账号 id，也是 KV key。TG 用户＝chat id 的字符串形式；匿名用户＝随机串 */
@@ -149,6 +164,8 @@ interface UserSub {
   /** TG chat id；匿名账号没有，此时不发 Telegram */
   chatId: number;
   leadHours: number[];
+  /** 炸房 / 资产回收提醒提前量（天），未设置＝DEMOLITION_LEAD_DAYS */
+  demoLeadDays?: number[];
   /** 分项提醒开关，未设置＝全开 */
   notify?: NotifyFlags;
   items: WatchItem[];
@@ -541,7 +558,8 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /unwatch 序号 — 取消关注
 
 提醒设置：
-/lead 24,1 — 提前量（小时）
+/lead 24,1 — 抽房提前量（小时）
+/demolead 15,10,5,1 — 炸房 / 资产回收提前量（天）
 /notify — 五类提醒开关
 /panel — 网页面板（免绑定）
 
@@ -663,7 +681,7 @@ async function handleCommand(
 
   // 群里只做炸房监控。抽房是个人的事：报名与否、提前量、推送渠道都因人而异，
   // 发一整群人既吵又没意义
-  if (isGroup && ['/watch', '/list', '/mode', '/unwatch', '/lead', '/notify', '/bark', '/name'].includes(cmd)) {
+  if (isGroup && ['/watch', '/list', '/mode', '/unwatch', '/lead', '/demolead', '/notify', '/bark', '/name'].includes(cmd)) {
     await tgSend(env, chatId, `群里只做炸房监控，${cmd} 是个人设置，私聊我发一次就行。`);
     return;
   }
@@ -913,13 +931,27 @@ ${r.msg}`);
       return;
     }
 
+    case '/demolead': {
+      const days = cleanDemoLeads((args[0] ?? '').split(',').map(s => Number(s.trim())));
+      if (typeof days === 'string') {
+        await tgSend(env, chatId, `${days}\n格式：/demolead 15,10,5,1（剩几天时提醒，逗号分隔）\n可选：${DEMO_LEAD_PRESETS.join(',')}`);
+        return;
+      }
+      const sub = await getSub(env, chatId);
+      sub.demoLeadDays = days;
+      await saveSub(env, sub);
+      await tgSend(env, chatId, `炸房 / 资产回收提醒已设为剩 ${days.join(',')} 天时各一次。`);
+      return;
+    }
+
     case '/notify': {
       const sub = await getSub(env, chatId);
-      const flags = sub.notify ?? NOTIFY_ALL;
-      const keys: (keyof NotifyFlags)[] = ['entry', 'results', 'claim', 'deposit', 'next'];
+      const flags = flagsOf(sub);
+      const keys: (keyof NotifyFlags)[] = ['entry', 'results', 'claim', 'deposit', 'next', 'demolition'];
       const labels = ['报名截止（申请期结束前）', '开奖（进入公示期）',
         '确认归属死线（公示期结束前，逾期扣 50%）',
-        '抽签金返还死线（公示期后 90 天，要点门牌）', '下轮开抽（新申请期开始）'];
+        '抽签金返还死线（公示期后 90 天，要点门牌）', '下轮开抽（新申请期开始）',
+        '炸房 / 资产回收'];
       const n = parseInt(args[0] ?? '', 10);
       if (!Number.isNaN(n) && n >= 1 && n <= keys.length) {
         const key = keys[n - 1];
@@ -932,7 +964,8 @@ ${r.msg}`);
       await tgSend(env, chatId,
         '提醒开关（发 /notify 序号 切换）：\n' +
         keys.map((k, i) => `${i + 1}. ${flags[k] ? '✅' : '❌'} ${labels[i]}`).join('\n') +
-        '\n\n' + `提前量：${sub.leadHours.join(',')} 小时（/lead 修改）`);
+        '\n\n' + `抽房提前量：${sub.leadHours.join(',')} 小时（/lead 修改）`
+        + `\n炸房 / 资产回收：剩 ${demoLeadsOf(sub).join(',')} 天时各一次（/demolead 修改）`);
       return;
     }
 
@@ -1232,7 +1265,9 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
     const wake = (t: number) => { if (t > nowSec && t < next) next = t; };
 
     // ── 炸房提醒（45 天未进房 / 拆除后资产回收 35 天）──
-    for (const h of sub.homes ?? []) {
+    // 关掉时整段跳过、也不记去重：再打开只补发当前那一档
+    const leads = demoLeadsOf(sub);
+    for (const h of flagsOf(sub).demolition ? sub.homes ?? [] : []) {
       const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
       // 群登记的房带上房主：提醒发到群里，别人得知道这条说的是谁
       const pos = await groupPos(env, h,
@@ -1242,11 +1277,11 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
       if (h.demolishedAt && h.demolishedAt > 0) {
         const fDeadline = dayDeadline(h.demolishedAt, FURNITURE_DAYS);
         // 同上：只发当前所处的那一档（补的炸房日期很旧时，别先发一条过时的「还剩 10 天」）
-        for (let i = 0; i < DEMOLITION_LEAD_DAYS.length; i++) {
-          const days = DEMOLITION_LEAD_DAYS[i];
+        for (let i = 0; i < leads.length; i++) {
+          const days = leads[i];
           const fireSec = fDeadline - days * 86400;
-          const upper = i + 1 < DEMOLITION_LEAD_DAYS.length
-            ? fDeadline - DEMOLITION_LEAD_DAYS[i + 1] * 86400
+          const upper = i + 1 < leads.length
+            ? fDeadline - leads[i + 1] * 86400
             : fDeadline;
           wake(fireSec);
           if (nowSec < fireSec || nowSec >= upper) continue;
@@ -1280,11 +1315,11 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
       const deadlineSec = dayDeadline(h.lastEnteredAt, DEMOLITION_DAYS);
 
       // 只发当前所处的那一档：补签一个很旧的进屋日期时，剩 5 天却先发一条「还剩 10 天」是错的
-      for (let i = 0; i < DEMOLITION_LEAD_DAYS.length; i++) {
-        const days = DEMOLITION_LEAD_DAYS[i];
+      for (let i = 0; i < leads.length; i++) {
+        const days = leads[i];
         const fireSec = deadlineSec - days * 86400;
-        const upper = i + 1 < DEMOLITION_LEAD_DAYS.length
-          ? deadlineSec - DEMOLITION_LEAD_DAYS[i + 1] * 86400
+        const upper = i + 1 < leads.length
+          ? deadlineSec - leads[i + 1] * 86400
           : deadlineSec;
         wake(fireSec);
         if (nowSec < fireSec || nowSec >= upper) continue;
@@ -1295,10 +1330,14 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
         dirty = true;
         due.push({
           chatId: sub.chatId,
-          title: days >= 15 ? '⚠️ 已进入自动拆除准备' : `🚨 炸房警告：还剩 ${days} 天`,
-          // 15 天档＝连续 30 天未进屋，游戏里此时才刚被列为撤除对象（任务情报里会显示）
+          title: days > 15 ? `🏠 进屋提醒：还剩 ${days} 天`
+            : days === 15 ? '⚠️ 已进入自动拆除准备' : `🚨 炸房警告：还剩 ${days} 天`,
+          // 15 天档＝连续 30 天未进屋，游戏里此时才刚被列为撤除对象（任务情报里会显示）；
+          // 更早的档是自选的提前提醒，那时还没被列入
           body: `${pos}\n已超过 ${DEMOLITION_DAYS - days} 天未进屋，`
-            + (days >= 15
+            + (days > 15
+                ? `第 30 天起会被列为撤除对象，有空进一次屋就好。`
+                : days === 15
                 ? `已被列为撤除对象（任务情报-房屋可见剩余天数）。`
                 : days <= 1
                   ? `今天必须进屋，否则将被自动拆除！`
@@ -1322,7 +1361,7 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
       }
     }
 
-    const notify = sub.notify ?? NOTIFY_ALL;
+    const notify = flagsOf(sub);
 
     // 群订阅（Telegram 的群 chat id 是负数）只跑房产那段，抽房不发到群里
     for (const w of sub.chatId < 0 ? [] : sub.items) {
@@ -1584,7 +1623,8 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const nowSec = Math.floor(Date.now() / 1000);
     return json({
       leadHours: sub.leadHours,
-      notify: sub.notify ?? NOTIFY_ALL,
+      demoLeadDays: demoLeadsOf(sub),
+      notify: flagsOf(sub),
       groupPublic: sub.groupPublic !== false,
       barkKey: sub.barkKey ?? '',
       wxpusherSpt: sub.wxpusherSpt ?? '',
@@ -1807,13 +1847,14 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
     const inc = body.notify ?? {};
     const sub2 = await getSub(env, chatId);
-    const cur = sub2.notify ?? NOTIFY_ALL;
+    const cur = flagsOf(sub2);
     const next: NotifyFlags = {
       entry: typeof inc.entry === 'boolean' ? inc.entry : cur.entry,
       results: typeof inc.results === 'boolean' ? inc.results : cur.results,
       claim: typeof inc.claim === 'boolean' ? inc.claim : cur.claim,
       deposit: typeof inc.deposit === 'boolean' ? inc.deposit : cur.deposit,
       next: typeof inc.next === 'boolean' ? inc.next : cur.next,
+      demolition: typeof inc.demolition === 'boolean' ? inc.demolition : cur.demolition,
     };
     sub2.notify = next;
     await saveSub(env, sub2);
@@ -1829,6 +1870,18 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     sub.groupPublic = body.open !== false;
     await saveSub(env, sub);
     return json({ ok: true, groupPublic: sub.groupPublic });
+  }
+
+  if (path === '/api/demolead' && request.method === 'POST') {
+    const body = (await request.json()) as { u?: number; k?: string; days?: unknown[] };
+    const chatId = await checkAuthBody(env, body);
+    if (chatId == null) return json({ error: '未绑定或令牌无效' }, 401);
+    const days = cleanDemoLeads(Array.isArray(body.days) ? body.days : []);
+    if (typeof days === 'string') return json({ error: days }, 400);
+    const sub = await getSub(env, chatId);
+    sub.demoLeadDays = days;
+    await saveSub(env, sub);
+    return json({ ok: true, demoLeadDays: days });
   }
 
   if (path === '/api/lead' && request.method === 'POST') {

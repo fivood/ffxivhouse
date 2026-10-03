@@ -16,22 +16,19 @@ public class ReminderEngine
     private List<ScheduledReminder> _scheduled = [];
     private readonly object _lock = new();
 
-    /// <summary>炸房提醒提前量（天）</summary>
-    private static readonly int[] DemolitionLeadDays = [15, 10, 5, 1];   // 15 = 第 30 天，游戏里进入「自动拆除准备」的节点
-
     /// <summary>
     /// 当前落在哪一档提前量里（最多一档）。
     /// 补签一个很旧的进屋日期时实际只剩 5 天，不该先冒出一条「还剩 10 天」。
     /// </summary>
-    private static IEnumerable<int> CurrentLeadLevel(DateTimeOffset deadline, DateTimeOffset now)
+    private static IEnumerable<int> CurrentLeadLevel(List<int> leads, DateTimeOffset deadline, DateTimeOffset now)
     {
-        for (var i = 0; i < DemolitionLeadDays.Length; i++)
+        for (var i = 0; i < leads.Count; i++)
         {
-            var from = deadline.AddDays(-DemolitionLeadDays[i]);
-            var to = i + 1 < DemolitionLeadDays.Length
-                ? deadline.AddDays(-DemolitionLeadDays[i + 1])
+            var from = deadline.AddDays(-leads[i]);
+            var to = i + 1 < leads.Count
+                ? deadline.AddDays(-leads[i + 1])
                 : deadline;
-            if (now >= from && now < to) yield return DemolitionLeadDays[i];
+            if (now >= from && now < to) yield return leads[i];
         }
     }
 
@@ -195,7 +192,10 @@ public class ReminderEngine
         }
 
         // ── 炸房提醒（45 天未进房）──
-        foreach (var home in _config.Config.Homes)
+        // 设置里存的是用户勾的档（天），排成从大到小才能按区间切
+        var leads = settings.DemolitionLeadDays.Where(d => d > 0).Distinct().OrderByDescending(d => d).ToList();
+        if (leads.Count == 0) leads = [15, 10, 5, 1];
+        foreach (var home in settings.NotifyDemolition ? _config.Config.Homes : [])
         {
             var homeKey = $"home:{home.Key}";
             var pos = $"{home.PositionText}（{home.Label}）";
@@ -204,7 +204,7 @@ public class ReminderEngine
             if (home.DemolishedAt > 0)
             {
                 var furnitureDeadline = home.FurnitureDeadline;
-                foreach (var days in CurrentLeadLevel(furnitureDeadline, now))
+                foreach (var days in CurrentLeadLevel(leads, furnitureDeadline, now))
                 {
                     Add2(ReminderType.FurnitureDeadline, days, furnitureDeadline.AddDays(-days), furnitureDeadline, homeKey,
                         $"拆除资产回收即将到期：还剩 {days} 天",
@@ -223,12 +223,15 @@ public class ReminderEngine
             if (home.LastEnteredAt <= 0) continue;
             var deadline = home.Deadline;
 
-            foreach (var days in CurrentLeadLevel(deadline, now))
+            foreach (var days in CurrentLeadLevel(leads, deadline, now))
             {
                 Add2(ReminderType.Demolition, days, deadline.AddDays(-days), deadline, homeKey,
-                    days >= 15 ? "已进入自动拆除准备" : $"炸房警告：还剩 {days} 天",
+                    days > 15 ? $"进屋提醒：还剩 {days} 天"
+                        : days == 15 ? "已进入自动拆除准备" : $"炸房警告：还剩 {days} 天",
                     $"{pos} 已超过 {45 - days} 天未进屋，" +
-                    (days >= 15
+                    (days > 15
+                        ? "第 30 天起会被列为撤除对象，有空进一次屋就好。"
+                        : days == 15
                         ? "已被列为撤除对象（任务情报-房屋可见剩余天数）。"
                         : days <= 1
                             ? "今天必须进屋，否则将被自动拆除！"

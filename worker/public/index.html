@@ -131,6 +131,11 @@
   }
   .chip:hover { background: var(--white); }
   .chip.on { background: var(--link); color: #fff; border-color: var(--link); }
+  /* 推送设置按提醒种类分组：抽房按小时、炸房按天，左边色条区分 */
+  .grp { border-left: 3px solid var(--link); padding: 2px 0 2px 10px; margin-bottom: 12px; }
+  .grp-title { font-weight: bold; margin-bottom: 2px; }
+  .grp.demo { border-left-color: var(--amber); }
+  .grp.demo .chip.on { background: var(--amber); border-color: var(--amber); }
   /* 微信渠道折叠开关 */
   .wx-toggle {
     display: block; width: 100%; text-align: left; font-weight: bold;
@@ -387,10 +392,19 @@
 <div id="watchSection" style="display:none">
   <div class="strip">⊙ 推送设置</div>
   <div class="panel bind-box">
-    要收哪几类提醒（点一下即时生效）：
-    <div class="chips" id="notifyChips"></div>
-    截止前提醒（点选时间片，即时生效）：
-    <div class="chips" id="leadChips"></div>
+    <div class="grp">
+      <div class="grp-title">抽房提醒 <span class="meta">按小时，点一下即时生效</span></div>
+      要收哪几类：
+      <div class="chips" id="notifyChips"></div>
+      截止前多久提醒（最多 3 个）：
+      <div class="chips" id="leadChips"></div>
+    </div>
+    <div class="grp demo">
+      <div class="grp-title">炸房提醒 <span class="meta">按天，管「我的房产」</span></div>
+      <div class="chips" id="demoChips"></div>
+      剩几天时提醒（45 天未进屋倒计时 / 拆除后 35 天资产回收共用，最多 6 个）：
+      <div class="chips" id="demoLeadChips"></div>
+    </div>
     <span class="meta">推送顺序：Telegram → Bark → 微信（有频率限制）</span>
     <label class="opt-line" title="Bot 拉进群做炸房监控时，群里怎么写你的房">
       <input type="checkbox" id="groupPublic" onchange="saveGroupPublic()">
@@ -605,6 +619,7 @@ async function loadWatch() {
     myWatches = data.items || [];
     myHomes = data.homes || [];
     leadHours = data.leadHours || [24, 1];
+    demoLeadDays = data.demoLeadDays || [15, 10, 5, 1];
     if (data.notify) notifyFlags = data.notify;
     renderNotifyChips();
     renderChips();
@@ -953,13 +968,16 @@ const NOTIFY_ITEMS = [
   ['claim', '确认归属', '公示期截止前提醒中签购入，逾期扣 50% 申请金'],
   ['deposit', '返还抽签金', '抽签金返还死线：公示期结束后 90 天内要去点门牌确认，不论中标与否，逾期不返还'],
   ['next', '下轮开抽', '准备期结束、新一轮申请期开始'],
+  ['demolition', '开启炸房提醒', '我的房产：45 天未进屋前按下面的天数提醒，拆除后提醒 35 天内回收资产'],
 ];
-let notifyFlags = { entry: true, results: true, claim: true, deposit: true, next: true };
+let notifyFlags = { entry: true, results: true, claim: true, deposit: true, next: true, demolition: true };
 
 function renderNotifyChips() {
-  $('notifyChips').innerHTML = NOTIFY_ITEMS.map(([k, name, tip]) =>
-    `<span class="chip ${notifyFlags[k] ? 'on' : ''}" title="${tip}" onclick="toggleNotify('${k}')">${name}</span>`
-  ).join('');
+  // 炸房按天提醒，和抽房那套小时时间片无关，单独放一行免得看着像受它管
+  const chip = ([k, name, tip]) =>
+    `<span class="chip ${notifyFlags[k] ? 'on' : ''}" title="${tip}" onclick="toggleNotify('${k}')">${name}</span>`;
+  $('notifyChips').innerHTML = NOTIFY_ITEMS.filter(([k]) => k !== 'demolition').map(chip).join('');
+  $('demoChips').innerHTML = NOTIFY_ITEMS.filter(([k]) => k === 'demolition').map(chip).join('');
 }
 
 async function toggleNotify(key) {
@@ -980,6 +998,30 @@ function renderChips() {
   $('leadChips').innerHTML = LEAD_PRESETS.map(h =>
     `<span class="chip ${leadHours.includes(h) ? 'on' : ''}" data-h="${h}" onclick="toggleChip(${h})">${h}h</span>`
   ).join('');
+  renderDemoLeadChips();
+}
+
+// 炸房 / 资产回收提前量（天），和 worker 的 DEMO_LEAD_PRESETS 对应
+const DEMO_LEAD_PRESETS = [30, 20, 15, 10, 7, 5, 3, 1];
+let demoLeadDays = [15, 10, 5, 1];
+
+function renderDemoLeadChips() {
+  $('demoLeadChips').innerHTML = DEMO_LEAD_PRESETS.map(d =>
+    `<span class="chip ${demoLeadDays.includes(d) ? 'on' : ''}" title="${d === 15 ? '第 30 天，刚进入拆除准备' : ''}" onclick="toggleDemoLead(${d})">${d} 天</span>`
+  ).join('');
+}
+
+async function toggleDemoLead(d) {
+  if (demoLeadDays.includes(d)) {
+    if (demoLeadDays.length <= 1) return toast('至少保留一个');
+    demoLeadDays = demoLeadDays.filter(x => x !== d);
+  } else {
+    if (demoLeadDays.length >= 6) return toast('最多选 6 个');
+    demoLeadDays = [...demoLeadDays, d].sort((a, b) => b - a);
+  }
+  renderDemoLeadChips();
+  const data = await submit('POST', '/api/demolead', { days: demoLeadDays });
+  if (data) toast('已保存：剩 ' + demoLeadDays.join(', ') + ' 天时提醒');
 }
 
 async function toggleChip(h) {

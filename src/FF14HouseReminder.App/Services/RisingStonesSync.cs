@@ -140,7 +140,7 @@ public static class RisingStonesSync
     /// <summary>石之家开始报剩余天数就说明已经在拆除倒计时了，推一条；同一个天数只推一次</summary>
     private static async Task WarnAsync(ConfigService config, PushService? push, RisingStonesCharacter ch, int remain)
     {
-        if (push == null) return;
+        if (push == null || !config.Config.Reminders.NotifyDemolition) return;
         var key = $"{ch.Name}|{ch.HouseText}|{remain}";
         if (!WarnedOnce.Add(key)) return;
         await push.SendAllAsync("石之家报了拆除倒计时",

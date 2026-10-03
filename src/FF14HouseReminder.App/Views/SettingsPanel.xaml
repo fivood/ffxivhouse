@@ -34,21 +34,46 @@
                 <TextBlock Text="⊙  设置" FontWeight="Bold" FontSize="15" Foreground="#55554A"/>
 
             <TextBlock Text="── 提醒规则" Style="{StaticResource H}"/>
-            <TextBlock Text="截止前提醒（可多选，最多 3 个）" TextWrapping="Wrap"/>
-            <WrapPanel Margin="0,2,0,6" x:Name="LeadChips">
-                <CheckBox Content="72h" Tag="72" Margin="0,0,8,0"/>
-                <CheckBox Content="48h" Tag="48" Margin="0,0,8,0"/>
-                <CheckBox Content="24h" Tag="24" Margin="0,0,8,0"/>
-                <CheckBox Content="12h" Tag="12" Margin="0,0,8,0"/>
-                <CheckBox Content="6h" Tag="6" Margin="0,0,8,0"/>
-                <CheckBox Content="3h" Tag="3" Margin="0,0,8,0"/>
-                <CheckBox Content="1h" Tag="1" Margin="0,0,8,0"/>
-            </WrapPanel>
-                <CheckBox Content="申请期截止前提醒（快去报名）" IsChecked="{Binding NotifyEntryDeadline}"/>
-                <CheckBox Content="开奖提醒（进入公示期，仅已报名）" IsChecked="{Binding NotifyResultsStart}"/>
-                <CheckBox Content="公示期截止前提醒（中签确认归属死线）" IsChecked="{Binding NotifyClaimDeadline}"/>
-                <CheckBox Content="抽签金返还死线提醒（公示期后 90 天）" IsChecked="{Binding NotifyDepositDeadline}"/>
-                <CheckBox Content="下轮申请期开始提醒" IsChecked="{Binding NotifyNextEntryStart}"/>
+            <!-- 两组各一个框：抽房按小时、炸房按天，左边色条区分，免得看着像共用一套提前量 -->
+            <Border Background="White" BorderBrush="#8B8B5E" BorderThickness="4,1,1,1" Padding="8,6"
+                    Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="抽房提醒（按小时）" FontWeight="Bold" Foreground="#55554A"/>
+                    <CheckBox Content="申请期截止前提醒（快去报名）" IsChecked="{Binding NotifyEntryDeadline}"/>
+                    <CheckBox Content="开奖提醒（进入公示期，仅已报名）" IsChecked="{Binding NotifyResultsStart}"/>
+                    <CheckBox Content="公示期截止前提醒（中签确认归属死线）" IsChecked="{Binding NotifyClaimDeadline}"/>
+                    <CheckBox Content="抽签金返还死线提醒（公示期后 90 天）" IsChecked="{Binding NotifyDepositDeadline}"/>
+                    <CheckBox Content="下轮申请期开始提醒" IsChecked="{Binding NotifyNextEntryStart}"/>
+                    <TextBlock Text="截止前多久提醒（可多选，最多 3 个）" Foreground="#8A8A80" Margin="0,4,0,0"/>
+                    <WrapPanel Margin="0,2,0,0" x:Name="LeadChips">
+                        <CheckBox Content="72h" Tag="72" Margin="0,0,8,0"/>
+                        <CheckBox Content="48h" Tag="48" Margin="0,0,8,0"/>
+                        <CheckBox Content="24h" Tag="24" Margin="0,0,8,0"/>
+                        <CheckBox Content="12h" Tag="12" Margin="0,0,8,0"/>
+                        <CheckBox Content="6h" Tag="6" Margin="0,0,8,0"/>
+                        <CheckBox Content="3h" Tag="3" Margin="0,0,8,0"/>
+                        <CheckBox Content="1h" Tag="1" Margin="0,0,8,0"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+            <Border Background="White" BorderBrush="#A66A00" BorderThickness="4,1,1,1" Padding="8,6">
+                <StackPanel>
+                    <TextBlock Text="炸房提醒（按天）" FontWeight="Bold" Foreground="#55554A"/>
+                    <CheckBox Content="开启（45 天未进屋 / 拆除后 35 天资产回收）" IsChecked="{Binding NotifyDemolition}"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="#8A8A80" Margin="0,4,0,0"
+                               Text="剩几天时提醒（两种倒计时共用，最多 6 个；15 天＝刚进入拆除准备）"/>
+                    <WrapPanel Margin="0,2,0,0" x:Name="DemoLeadChips">
+                        <CheckBox Content="30天" Tag="30" Margin="0,0,8,0"/>
+                        <CheckBox Content="20天" Tag="20" Margin="0,0,8,0"/>
+                        <CheckBox Content="15天" Tag="15" Margin="0,0,8,0"/>
+                        <CheckBox Content="10天" Tag="10" Margin="0,0,8,0"/>
+                        <CheckBox Content="7天" Tag="7" Margin="0,0,8,0"/>
+                        <CheckBox Content="5天" Tag="5" Margin="0,0,8,0"/>
+                        <CheckBox Content="3天" Tag="3" Margin="0,0,8,0"/>
+                        <CheckBox Content="1天" Tag="1" Margin="0,0,8,0"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
 
                 <TextBlock Text="── 常规" Style="{StaticResource H}"/>
                 <StackPanel Orientation="Horizontal">

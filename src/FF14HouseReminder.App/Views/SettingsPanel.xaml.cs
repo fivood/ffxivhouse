@@ -25,11 +25,14 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
         // 勾选提前量时间片
         foreach (var cb in LeadChips.Children.OfType<System.Windows.Controls.CheckBox>())
             cb.IsChecked = r.LeadHours.Contains(int.Parse((string)cb.Tag));
+        foreach (var cb in DemoLeadChips.Children.OfType<System.Windows.Controls.CheckBox>())
+            cb.IsChecked = r.DemolitionLeadDays.Contains(int.Parse((string)cb.Tag));
         NotifyEntryDeadline = r.NotifyEntryDeadline;
         NotifyResultsStart = r.NotifyResultsStart;
         NotifyClaimDeadline = r.NotifyClaimDeadline;
         NotifyDepositDeadline = r.NotifyDepositDeadline;
         NotifyNextEntryStart = r.NotifyNextEntryStart;
+        NotifyDemolition = r.NotifyDemolition;
 
         PollIntervalMinutes = g.PollIntervalMinutes.ToString();
         AutoStart = g.AutoStart;
@@ -64,6 +67,7 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
     public bool NotifyClaimDeadline { get; set; }
     public bool NotifyDepositDeadline { get; set; }
     public bool NotifyNextEntryStart { get; set; }
+    public bool NotifyDemolition { get; set; }
 
     public string PollIntervalMinutes { get; set; } = "6";
     public bool AutoStart { get; set; }
@@ -326,11 +330,17 @@ public partial class SettingsPanel : System.Windows.Controls.UserControl, INotif
             .OrderByDescending(h => h).ToList();
         if (r.LeadHours.Count == 0) r.LeadHours = [24, 1];
         if (r.LeadHours.Count > 3) r.LeadHours = r.LeadHours.Take(3).ToList();
+        r.DemolitionLeadDays = DemoLeadChips.Children.OfType<System.Windows.Controls.CheckBox>()
+            .Where(cb => cb.IsChecked == true)
+            .Select(cb => int.Parse((string)cb.Tag))
+            .OrderByDescending(d => d).Take(6).ToList();
+        if (r.DemolitionLeadDays.Count == 0) r.DemolitionLeadDays = [15, 10, 5, 1];
         r.NotifyEntryDeadline = NotifyEntryDeadline;
         r.NotifyResultsStart = NotifyResultsStart;
         r.NotifyClaimDeadline = NotifyClaimDeadline;
         r.NotifyDepositDeadline = NotifyDepositDeadline;
         r.NotifyNextEntryStart = NotifyNextEntryStart;
+        r.NotifyDemolition = NotifyDemolition;
 
         if (int.TryParse(PollIntervalMinutes, out var minutes))
             g.PollIntervalMinutes = Math.Max(5, minutes);
