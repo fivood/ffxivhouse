@@ -1261,7 +1261,8 @@ ${r.msg}`);
         const deadline = dayDeadline(h.lastEnteredAt, DEMOLITION_DAYS);
         const remain = deadline - nowSec;
         const days = Math.floor(remain / 86400);
-        const mark = days <= 5 ? '🔴' : days <= 10 ? '🟠' : '🟢';
+        // 分段和网页 enterStage 一致（9 天一段，蓝青两段合成 🔵）：剩 15 天已是拆除准备，不能再亮绿灯
+        const mark = days > 27 ? '🔵' : days > 18 ? '🟢' : days > 9 ? '🟡' : '🔴';
         return `${pos}\n　${mark} 剩余 ${days} 天（最后进屋 ${fmtDay(h.lastEnteredAt)}）`;
       }));
       await tgSend(env, chatId, lines.join('\n'));
