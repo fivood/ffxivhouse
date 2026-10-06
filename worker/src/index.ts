@@ -402,10 +402,11 @@ async function getSub(env: Env, id: string | number): Promise<UserSub> {
 async function saveSub(env: Env, sub: UserSub): Promise<void> {
   const key = `sub:${sub.id ?? sub.chatId}`;
   await env.KV.put(key, JSON.stringify(sub));
-  // 用户改了设置：标成「立即到期」，下一轮 cron 就重算它（刚加的房可能马上要补发提醒）
+  // 用户改了设置：标成「立即到期」，下一轮 cron 就重算它（刚加的房可能马上要补发提醒）。
+  // 标记用负的毫秒时间戳，每次都不一样：writeSched 靠它分辨「本轮开始前就到期」和「本轮期间又改了」
   const sched = await getSched(env);
-  if (sched && sched[key] !== 0) {
-    sched[key] = 0;
+  if (sched) {
+    sched[key] = -Date.now();
     await env.KV.put(SCHED_KEY, JSON.stringify(sched));
   }
 }
@@ -1318,7 +1319,7 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
     if (sub.items.length > 0 || (sub.homes?.length ?? 0) > 0) subs.push(sub);
     else updates[key] = nowSec + 30 * 86400;
   }
-  if (subs.length === 0) { await writeSched(env, updates, !sched); return; }
+  if (subs.length === 0) { await writeSched(env, updates, sched); return; }
 
   const serverIds = [...new Set(subs.flatMap(s => s.items.map(i => i.server)))];
 
@@ -1566,18 +1567,21 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
     if (dirty) await env.KV.put(`sub:${sub.id}`, JSON.stringify(sub));
     updates[`sub:${sub.id}`] = next;
   }
-  await writeSched(env, updates, !sched);
+  await writeSched(env, updates, sched);
 
   console.log(`提醒检查完成：${subs.length} 个订阅，${serverIds.length} 个服务器`);
 }
 
-/** 写回排程：全量扫描时整张重建（清掉残留），否则写前重读、只改本轮碰过的，尽量不盖掉 saveSub 刚标的 */
-async function writeSched(env: Env, updates: Record<string, number | null>, rebuild: boolean): Promise<void> {
-  const sched: Sched = rebuild ? {} : (await getSched(env)) ?? {};
+/**
+ * 写回排程：seen = 本轮开始时读到的索引；null 表示全量扫描，整张重建（清掉残留）。
+ * 否则写前重读、只改本轮碰过的，尽量不盖掉 saveSub 刚标的
+ */
+async function writeSched(env: Env, updates: Record<string, number | null>, seen: Sched | null): Promise<void> {
+  const sched: Sched = seen ? (await getSched(env)) ?? {} : {};
   for (const [k, v] of Object.entries(updates)) {
-    // 本轮处理期间用户又改了设置（被标成 0），保留 0 让下一轮再算
     if (v === null) delete sched[k];
-    else if (sched[k] !== 0) sched[k] = v;
+    // 和本轮开始时不一样 = 处理期间用户又改了设置（saveSub 换了新标记），保留让下一轮再算
+    else if (!seen || sched[k] === seen[k]) sched[k] = v;
   }
   await env.KV.put(SCHED_KEY, JSON.stringify(sched));
 }
