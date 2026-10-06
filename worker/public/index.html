@@ -409,7 +409,8 @@
     <label class="opt-line" title="Bot 拉进群做炸房监控时，群里怎么写你的房">
       <input type="checkbox" id="groupPublic" onchange="saveGroupPublic()">
       群里公开我的房屋位置
-      <span class="meta">关掉后群里只写「你 的房（备注）还剩 N 天」，提醒照发</span>
+      <span class="meta">关掉后群里只写「你 的房（备注）还剩 N 天」，提醒照发。
+        要让群里看到这里登记的房：在那个群里发一次 /myhome</span>
     </label>
     <button class="wx-toggle" id="tgToggle" onclick="toggleTg()">
       <span id="tgArrow">▸</span> Telegram 推送<span id="tgMiniStatus" style="color:var(--green)"></span>
