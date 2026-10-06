@@ -578,6 +578,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 /myhome 萌芽池 白银乡 14 43 阿光 — 登记房产
 /entered [序号] [日期] — 进屋打卡 / 补签（天数按日本时间算，00:00 跨一天）
 /demolished [序号] — 标记已拆除（35 天资产回收倒计时）
+/delhome 序号 — 删除这套房（打卡记录一并删除）
 /fc [序号] — 设为/取消部队房（成员间共享打卡）
 /homes — 我的房产
 
@@ -588,7 +589,7 @@ const HELP_TEXT = `🏠 抽房了吗（FF14 房屋抽签提醒）
 到点我在群里点名，谁看到谁顺手提醒本人一声。
 私聊里已经登记过房的，在群里发一次 /myhome（不带参数）就能带进来，
 记录只有一份，私聊和群里打卡都算；/myhome off 撤出。
-群里只有 /myhome /entered /demolished /fc /homes 五条；
+群里只有 /myhome /entered /demolished /fc /delhome /homes 六条；
 序号只认你自己那几套（有两套就是 1 和 2，不用去数别人的）；
 抽房关注和推送设置是个人的，只在私聊有效。
 不想让群里看到具体房号：私聊发 /public off，群里就只写
@@ -1197,6 +1198,28 @@ ${r.msg}`);
         ? `已设「${h.label}」为部队房：别人登记了同一套房、也设了部队房的话，谁打卡都一起重置。`
           + (isGroup ? '\n群里提醒的打卡按钮，任一群友都能点。' : '')
         : `「${h.label}」已改回个人房，只认自己打卡。`);
+      return;
+    }
+
+    case '/delhome': {
+      // 删了就没了（连打卡记录），所以序号必须明说：只有一套也不默认，免得手滑
+      const homes = await myHomesHere(env, await getSub(env, chatId), isGroup, sender);
+      if (homes.length === 0) {
+        await tgSend(env, chatId, isGroup ? NO_HOME_IN_GROUP : '还没有登记房产。');
+        return;
+      }
+      const idx = parseInt(args[0] ?? '', 10) - 1;
+      if (!(idx >= 0 && idx < homes.length)) {
+        const list = homes.map(({ h }, i) => `${i + 1}. ${h.label}`).join('\n');
+        await tgSend(env, chatId, `删除哪一套？/delhome 序号（打卡记录一并删除）\n${list}`);
+        return;
+      }
+      const { sub, h } = homes[idx];
+      sub.homes = (sub.homes ?? []).filter(x => x !== h);
+      await saveSub(env, sub);
+      const serverName = ALL_SERVERS.find(s => s.id === h.server)?.name ?? `${h.server}`;
+      await tgSend(env, chatId, `🗑 已删除：${serverName} ${AREA_NAMES[h.area]} ${h.slot + 1}区 ${h.id}号（${h.label}）`
+        + (isGroup && sub.id !== String(chatId) ? '\n这是你私聊登记的那份，私聊里也一起没了。' : ''));
       return;
     }
 
