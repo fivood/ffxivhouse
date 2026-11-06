@@ -15,6 +15,10 @@ public static class Countdown
         return $"剩余 {span.Minutes} 分";
     }
 
+    /// <summary>准备期文案：先说「准备中」再说多久后开放报名。别写「开抽」——看着像现在就能抽</summary>
+    public static string Preparing(DateTimeOffset now, DateTimeOffset end) =>
+        end <= now ? "准备中 · 即将开放报名" : $"准备中 · {To(now, end)["剩余 ".Length..]}后开放报名";
+
     /// <summary>阶段状态配色（浅色主题）</summary>
     public static string StateColor(LotteryState state) => state switch
     {
@@ -98,7 +102,7 @@ public partial class WatchViewModel : ObservableObject
         {
             LotteryState.Available => "报名截止 " + Countdown.To(now, phase.PhaseEnd),
             LotteryState.ResultsPeriod => "公示截止 " + Countdown.To(now, phase.PhaseEnd),
-            LotteryState.Preparing => "开抽 " + Countdown.To(now, phase.PhaseEnd),
+            LotteryState.Preparing => Countdown.Preparing(now, phase.PhaseEnd),
             _ => ""
         };
         SourceText = snapshot.Source == HouseDataSource.Local ? "📡本地直报" : "☁网站数据";
@@ -239,7 +243,7 @@ public partial class HouseItemViewModel : ObservableObject
         {
             LotteryState.Available => "报名截止 " + Countdown.To(now, phase.PhaseEnd),
             LotteryState.ResultsPeriod => "公示截止 " + Countdown.To(now, phase.PhaseEnd),
-            LotteryState.Preparing => "开抽 " + Countdown.To(now, phase.PhaseEnd),
+            LotteryState.Preparing => Countdown.Preparing(now, phase.PhaseEnd),
             _ => ""
         };
     }

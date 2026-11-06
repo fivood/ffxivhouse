@@ -86,6 +86,8 @@ interface WatchItem {
   depositDeadline?: number;
   /** 申请号码（游戏里报名后给的号），纯备忘，可不填 */
   entryNo?: string;
+  /** 本轮公示期结束时间：cron 在公示期看到时记下，过了就说明这批开完奖了，从关注里拿掉 */
+  resultsEnd?: number;
 }
 
 /** 我的房产（炸房提醒）：手动登记 + 进房打卡 */
@@ -169,6 +171,11 @@ interface UserSub {
   /** 分项提醒开关，未设置＝全开 */
   notify?: NotifyFlags;
   items: WatchItem[];
+  /**
+   * 开完奖、从关注里拿掉的「已报名」那批：只为提醒去点门牌领回抽签金（公示期后 90 天），
+   * 顺带让人知道上一轮自己抽的是哪几套。过了返还死线自动清掉
+   */
+  deposits?: WatchItem[];
   /** 我的房产（炸房提醒） */
   homes?: HomeEntry[];
   /**
@@ -916,8 +923,15 @@ ${r.msg}`);
 
     case '/list': {
       const sub = await getSub(env, chatId);
+      const depositLines = (sub.deposits ?? []).map(d => {
+        const serverName = ALL_SERVERS.find(s => s.id === d.server)?.name ?? `${d.server}`;
+        return `· ${serverName} ${AREA_NAMES[d.area]} ${d.slot + 1}区 ${d.id}号${d.entryNo ? ` #${d.entryNo}` : ''}`
+          + ` — ${fmtTime(d.depositDeadline ?? 0)} 前点门牌领回`;
+      });
+      const depositText = depositLines.length
+        ? `\n\n💰 已开奖、抽签金待领回（不中签也要去点门牌确认）：\n${depositLines.join('\n')}` : '';
       if (sub.items.length === 0) {
-        await tgSend(env, chatId, '关注列表为空。用 /watch 添加，详见 /help');
+        await tgSend(env, chatId, '关注列表为空。用 /watch 添加，详见 /help' + depositText);
         return;
       }
       const lines: string[] = [`共 ${sub.items.length} 项（提前量 ${sub.leadHours.join(',')} 小时）：`];
@@ -933,13 +947,13 @@ ${r.msg}`);
             lines.push(`${pos}（${modeText}）\n　已售出或下架`);
           } else {
             const phase = getPhase(house, nowSec);
-            lines.push(`${pos}（${modeText}）\n　${STATE_NAMES[phase.state]}${phase.estimated ? '（推测）' : ''} ${fmtRemain(nowSec, phase.end)} · ${fmtTime(phase.end)} 截止`);
+            lines.push(`${pos}（${modeText}）\n　${STATE_NAMES[phase.state]}${phase.estimated ? '（推测）' : ''} ${fmtRemain(nowSec, phase.end)} · ${fmtTime(phase.end)} ${phase.state === 3 ? '开放报名' : '截止'}`);
           }
         } catch {
           lines.push(`${pos}（${modeText}）\n　数据获取失败`);
         }
       }
-      await tgSend(env, chatId, lines.join('\n'));
+      await tgSend(env, chatId, lines.join('\n') + depositText);
       return;
     }
 
@@ -1339,7 +1353,7 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
     if (!sub) { updates[key] = null; continue; }   // 已删除（合并账号等）
     sub.id ??= key.slice(4);
     // 有关注或有房产的用户才参与提醒；其余的等它改设置（saveSub 会标到期）
-    if (sub.items.length > 0 || (sub.homes?.length ?? 0) > 0) subs.push(sub);
+    if (sub.items.length > 0 || (sub.homes?.length ?? 0) > 0 || (sub.deposits?.length ?? 0) > 0) subs.push(sub);
     else updates[key] = nowSec + 30 * 86400;
   }
   if (subs.length === 0) { await writeSched(env, updates, sched); return; }
@@ -1467,8 +1481,19 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
 
     const notify = flagsOf(sub);
 
+    // 本轮公示期结束＝这批开完奖了：从关注里拿掉，下一轮就不会分不清抽的是哪批。
+    // 报过名的还欠一个抽签金返还提醒，挪进 deposits 接着提醒；没报名的直接丢
+    const ongoing: WatchItem[] = [];
+    for (const w of sub.items) {
+      if (!w.resultsEnd || nowSec < w.resultsEnd) { ongoing.push(w); continue; }
+      dirty = true;
+      if (w.mode === 1 && (w.depositDeadline ?? 0) > nowSec) (sub.deposits ??= []).push(w);
+    }
+    sub.items = ongoing;
+    const deposits = sub.deposits ?? [];
+
     // 群订阅（Telegram 的群 chat id 是负数）只跑房产那段，抽房不发到群里
-    for (const w of sub.chatId < 0 ? [] : sub.items) {
+    for (const w of sub.chatId < 0 ? [] : [...sub.items, ...deposits]) {
       const serverName = ALL_SERVERS.find(s => s.id === w.server)?.name ?? `${w.server}`;
       const pos = `${serverName} ${AREA_NAMES[w.area]} ${w.slot + 1}区 ${w.id}号 [${SIZE_NAMES[sizeOf(w.area, w.id)] ?? '?'}]`;
 
@@ -1497,6 +1522,7 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
           }
         }
       }
+      if (deposits.includes(w)) continue;   // 开完奖挪走的那批只管抽签金
 
       const house = salesByServer.get(w.server)
         ?.find(h => h.Area === w.area && h.Slot === w.slot && h.ID === w.id);
@@ -1540,6 +1566,7 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
           }
         }
       } else if (phase.state === 2) {
+        if (w.resultsEnd !== phase.end) { w.resultsEnd = phase.end; dirty = true; }
         // 开奖：申请期一结束就进公示期，挂在公示期开始那一刻发（挂在阶段结束发永远等不到）
         if (w.mode === 1 && notify.results) {
           consider(1, null, phase.end - RESULTS_SEC, '🎉 抽房结果已公布',
@@ -1565,6 +1592,11 @@ async function runReminders(env: Env, fullScan: boolean): Promise<void> {
           }
         }
       }
+    }
+
+    if (sub.deposits) {
+      sub.deposits = sub.deposits.filter(d => d.depositDeadline);
+      if (sub.deposits.length === 0) delete sub.deposits;
     }
 
     for (const r of due) {
@@ -1754,6 +1786,12 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
         remainDays: h.lastEnteredAt > 0 ? Math.floor((dayDeadline(h.lastEnteredAt, DEMOLITION_DAYS) - nowSec) / 86400) : -1,
       })),
       items: await enrichWatch(env, sub),
+      // 开完奖、待领回抽签金的（已从关注里拿掉）
+      deposits: (sub.deposits ?? []).map(d => ({
+        server: d.server, serverName: ALL_SERVERS.find(s => s.id === d.server)?.name ?? `${d.server}`,
+        area: d.area, areaName: AREA_NAMES[d.area], slot: d.slot, slotNo: d.slot + 1, id: d.id,
+        size: SIZE_NAMES[sizeOf(d.area, d.id)] ?? '?', entryNo: d.entryNo ?? '', depositDeadline: d.depositDeadline ?? 0,
+      })),
     });
   }
 
@@ -1929,6 +1967,7 @@ async function handleApi(request: Request, env: Env, url: URL): Promise<Response
     const have = new Set(dst.items.map(keyOf));
     let merged = 0;
     for (const w of src.items) if (!have.has(keyOf(w))) { dst.items.push(w); merged++; }
+    if (src.deposits?.length) dst.deposits = [...(dst.deposits ?? []), ...src.deposits];
     const homes = dst.homes ?? [];
     const haveHome = new Set(homes.map(keyOf));
     for (const h of src.homes ?? []) {

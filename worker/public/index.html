@@ -486,6 +486,7 @@ let sales = [];
 // 房区空置实测（卫月插件逛房区时上报的），键是 "区:小区"；没有的房区退回按在售列表推测
 let wards = {};
 let myWatches = [];
+let myDeposits = [];   // 开完奖、从关注里拿掉的「已报名」那批，只剩抽签金待领回
 
 // ── 绑定 ──
 const tgApp = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData
@@ -618,6 +619,7 @@ async function loadWatch() {
     }
     const data = await resp.json();
     myWatches = data.items || [];
+    myDeposits = data.deposits || [];
     myHomes = data.homes || [];
     leadHours = data.leadHours || [24, 1];
     demoLeadDays = data.demoLeadDays || [15, 10, 5, 1];
@@ -692,7 +694,11 @@ function watchKey(w) { return `${w.server}:${w.area}:${w.slot}:${w.id}`; }
 
 function renderWatch() {
   const el = $('watchList');
-  if (!myWatches.length) { el.innerHTML = '<div class="empty">还没有关注，去下面挑一套</div>'; return; }
+  // 每轮公示期一结束，云端就把这批从关注里拿掉；报过名的挪到这里，提醒去领回抽签金
+  const depo = myDeposits.length ? `<div class="item"><div class="meta">💰 已开奖、抽签金待领回（不中签也要去点门牌确认）</div>`
+    + myDeposits.map(d => `<div>${d.serverName} ${d.areaName} ${d.slotNo}区 ${d.id}号${d.entryNo ? ` #${d.entryNo}` : ''}`
+      + ` <span class="meta">${fmtDate(d.depositDeadline)} 前</span></div>`).join('') + `</div>` : '';
+  if (!myWatches.length) { el.innerHTML = '<div class="empty">还没有关注，去下面挑一套</div>' + depo; return; }
   const sorted = [...myWatches].sort((a, b) => (a.phaseEnd || 9e15) - (b.phaseEnd || 9e15));
   el.innerHTML = sorted.map(w => {
     if (w.gone) return `<div class="item"><div class="row"><span class="title">${w.serverName} ${w.areaName} ${w.slotNo}区 ${w.id}号</span>
@@ -710,7 +716,7 @@ function renderWatch() {
       <div>${state}${cd}${w.stale ? ` <span class="warn">${ico('warn')} 数据较旧</span>` : ''}</div>
       <div class="meta">${(w.price || 0).toLocaleString()} 金币 · ${PTYPE[w.purchaseType] || ''} · ${REGION[w.regionType] ?? '未知'}${w.state === 1 ? ` · ${partText(w)}` : ''}${w.entryNo ? ` · 申请号 #${w.entryNo}` : ''}</div>
     </div>`;
-  }).join('');
+  }).join('') + depo;
 }
 
 // 尺寸多选：值存成 "S,M" 这样一串，兼容旧的 -1 / 单个字母
